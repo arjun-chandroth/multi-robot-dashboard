@@ -1,12 +1,12 @@
-# Multi-Robot Rover - try39
+# Multi-Robot Rover - try40
 
-This stage refines the AI controller and dashboard interactions within the modular application.
+The dashboard restores explicit joystick/control and recording handlers and adds an Arduino diagnostic route.
 
 ## Features
-- Retains event-driven server and hardware/camera integration.
-- Updates AI controller behavior and related dashboard JavaScript/styles.
-- Keeps sensor telemetry, camera recording, control modes, and ROS 2 integration.
-- Maintains centralized rover configuration.
+- Adds server handlers for joystick packets and recording start/pause/stop events.
+- Adds an Arduino test endpoint for checking the serial link.
+- Retains modular camera, AI, ROS 2, monitoring, and sensor modules.
+- Updates the dashboard template for revised controls.
 
 ## Dependencies and hardware
 Python 3 with Flask, Flask-SocketIO, OpenCV, NumPy, psutil, pyserial, pyttsx3, requests, and Ultralytics. ROS 2 `rclpy`/`sensor_msgs` are system dependencies. A local YOLO weights file and hardware are needed for those features.
@@ -23,7 +23,7 @@ python app.py
 ```
 
 ## Changes from the previous available try
-Further revises AI and frontend behavior without changing the overall module boundaries. The previous available stage in this history is try38.
+Restores explicit control and recording event handlers and adds an Arduino diagnostic action. The previous available stage in this history is try39.
 
 ## Notes
-Environment-based AI setup arrives in try44; earlier configuration remains code/config driven.
+Treat test/control endpoints as hardware actions; do not expose the dashboard to untrusted networks.

@@ -194,6 +194,111 @@ def set_obstacle_mode_route(state):
         else:
             return jsonify({"status": "Error deactivating obstacle avoidance"}), 500
 
+# --- SocketIO Control Handlers ---
+@socketio.on('control')
+def handle_control(command):
+    global current_control_mode
+    
+    if current_control_mode == 'BUTTONS' and hardware_controller.arduino_connected:
+        try:
+            print(f"Sending command to Arduino: {command}")
+            hardware_controller.send_command(command)
+        except Exception as e:
+            print(f"Error sending command to Arduino: {e}")
+            socketio.emit('control_error', {'message': str(e)})
+
+@socketio.on('joystick_input')
+def handle_joystick_input(data):
+    global current_control_mode
+    
+    if current_control_mode != 'JOYSTICK' or not hardware_controller.arduino_connected:
+        return
+
+    axes = data.get('axes', [])
+    if len(axes) < 4:
+        return
+
+    x = round(axes[3], 1)
+    y = round(axes[1], 1)
+
+    if y == 1.0:
+        command = 'F'
+    elif y == -1.0:
+        command = 'B'
+    elif x == 1.0:
+        command = 'L'
+    elif x == -1.0:
+        command = 'R'
+    else:
+        command = 'S'
+
+    try:
+        hardware_controller.send_command(command)
+        print(f"[Joystick] Sent command: {command}")
+    except Exception as e:
+        print(f"[Joystick] Error sending command {command}: {e}")
+
+@socketio.on('joystick')
+def handle_joystick(data):
+    global current_control_mode
+    
+    if current_control_mode != 'JOYSTICK' or not hardware_controller.arduino_connected:
+        return
+        
+    try:
+        x, y = map(int, data.split(','))
+        
+        if abs(y) > abs(x):
+            if y > 100:
+                hardware_controller.send_command('F')
+            elif y < -100:
+                hardware_controller.send_command('B')
+            else:
+                hardware_controller.send_command('S')
+        else:
+            if x > 100:
+                hardware_controller.send_command('R')
+            elif x < -100:
+                hardware_controller.send_command('L')
+            else:
+                hardware_controller.send_command('S')
+    except Exception as e:
+        print(f"Error processing joystick data: {e}")
+
+# --- SocketIO Recording Handlers ---
+@socketio.on('start_recording')
+def handle_start_recording(data):
+    stream = data.get('stream')
+    if stream in ['fpv', 'rear']:
+        camera_instance = hardware_controller.camera if stream == 'fpv' else hardware_controller.rear_camera
+        success = camera_processor.start_recording(stream, camera_instance)
+        socketio.emit('recording_status', {
+            'stream': stream,
+            'recording': success
+        })
+
+@socketio.on('stop_recording')
+def handle_stop_recording(data):
+    stream = data.get('stream')
+    if stream in ['fpv', 'rear']:
+        camera_processor.stop_recording(stream)
+        socketio.emit('recording_status', {
+            'stream': stream,
+            'recording': False
+        })
+
+@socketio.on('pause_recording')
+def handle_pause_recording(data):
+    stream = data.get('stream')
+    # For now, treat pause as stop since VideoWriter doesn't support pausing
+    if stream in ['fpv', 'rear']:
+        camera_processor.stop_recording(stream)
+        socketio.emit('recording_status', {
+            'stream': stream,
+            'recording': False,
+            'paused': True
+        })
+
 # --- SocketIO Handler for AI ---
 @socketio.on('ai_message')
 def handle_ai_message(data):
@@ -233,6 +338,12 @@ def handle_ai_message(data):
             'error': True
         })
 
+# --- Debug Route for Testing Arduino ---
+@app.route('/test_arduino/<command>')
+def test_arduino(command):
+    if hardware_controller.send_command(command):
+        return jsonify({"status": f"Command {command} sent successfully"})
+    return jsonify({"status": "Failed to send command"}), 500
 
 def cleanup():
     print("Initiating cleanup...")
@@ -266,8 +377,17 @@ if __name__ == '__main__':
 
     running = True
 
+    # Initialize hardware with debug info
+    print("Initializing Arduino...")
     hardware_controller.init_arduino()
+    print("Initializing cameras...")
     hardware_controller.init_cameras()
+    
+    # Debug connection status
+    print(f"Arduino connected: {hardware_controller.arduino_connected}")
+    print(f"Front camera connected: {hardware_controller.camera is not None}")
+    print(f"Rear camera connected: {hardware_controller.rear_camera is not None}")
+    print(f"Control mode: {current_control_mode}")
 
     threading.Thread(target=system_monitor.update_system_metrics_loop, args=(camera_processor,), daemon=True).start()
     threading.Thread(target=hardware_controller.read_sensor_data_loop, daemon=True).start()
