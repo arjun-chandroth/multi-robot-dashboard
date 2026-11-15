@@ -12,6 +12,13 @@ import zipfile
 import psutil
 import socket
 
+
+# Add at the top of app.py
+from dotenv import load_dotenv
+load_dotenv()  # This loads variables from .env file
+
+
+
 # Import modularized components
 from roverconf import RECORDINGS_DIR, SENSOR_DATA_DIR, STATIC_DIR, INITIAL_SENSOR_DATA, CAMERA_RESOLUTION, CAMERA_FPS
 from hardware_controller import HardwareController
