@@ -37,6 +37,20 @@ from collections import defaultdict, deque
 import socket
 import urllib.request
 
+
+
+
+import re
+import speech_recognition as sr
+import subprocess
+import pyttsx3
+
+
+
+
+
+
+
 # Updated for webcam perspective (modify these coordinates based on your camera view)
 SOURCE = np.array([[320, 240], [960, 240], [1280, 720], [0, 720]])  # Default 640x480 webcam coordinates
 TARGET_WIDTH = 25
@@ -1088,6 +1102,102 @@ def signal_handler(sig, frame):
     cleanup()
     sys.exit(0)
 
+
+
+
+def run_voice_ai_loop():
+
+    recognizer = sr.Recognizer()
+    engine = pyttsx3.init()
+
+    def speak(text):
+        engine.say(text)
+        engine.runAndWait()
+
+    def get_speech_input():
+        with sr.Microphone() as source:
+            print("Listening...", flush=True)
+            recognizer.adjust_for_ambient_noise(source, duration=0.5)
+            recognizer.pause_threshold = 1.5
+            recognizer.sample_rate = 48000
+            try:
+                audio = recognizer.listen(source)
+                return recognizer.recognize_google(audio)
+            except:
+                return None
+
+    def extract_commands(text):
+        pattern = r'\b[FBLRS]\d+\b(?:,\s*\b[FBLRS]\d+\b)*'
+        match = re.search(pattern, text)
+        return match.group(0) if match else None
+
+    def send_to_arduino(command):
+        if arduino_connected and arduino:
+            try:
+                arduino.write((command + '\n').encode('utf-8'))
+                arduino.flush()
+                print(f"[AI] Sent to Arduino: {command}")
+            except Exception as e:
+                print(f"[AI] Error sending command: {e}")
+        else:
+            print("[AI] Arduino not connected")
+
+    def process_response(response):
+        commands = extract_commands(response)
+        if commands and len(commands.strip()) == len(response.strip()):
+            send_to_arduino(commands)
+            return None
+        elif commands:
+            send_to_arduino(commands)
+            return re.sub(r'\b([FBLRS]\d+)(?:,\s*([FBLRS]\d+))*\b', '', response)
+        return response
+
+    def query_llama(prompt):
+        try:
+            result = subprocess.run(
+                ["ollama", "run", "arthur-mk2", "", prompt],
+                capture_output=True,
+                text=True
+            )
+            return result.stdout.strip()
+        except Exception as e:
+            print(f"[AI] Llama error: {e}")
+            return None
+
+    speak("AI control is now active.")
+    print("AI control is now active.")
+    
+    # Ask for input mode once
+    input_mode = None
+    while input_mode not in ["voice", "cli"]:
+        input_mode = input("Choose input mode ('voice' or 'cli'): ").strip().lower()
+
+    while current_control_mode == 'AI':
+        if input_mode == "voice":
+            user_input = get_speech_input()
+        else:
+            user_input = input("You: ")
+
+        if not user_input:
+            continue
+
+        if user_input.lower() in ['exit', 'stop', 'quit']:
+            speak("Stopping AI control.")
+            break
+
+        response = query_llama(user_input)
+        if response:
+            filtered = process_response(response)
+            if filtered:
+                print(f"Llama: {filtered}")
+                speak(filtered)
+                socketio.emit('ai_response', {'text': filtered})
+
+
+
+
+
+
 @app.route('/')
 def index():
     recordings = []
@@ -1177,9 +1287,20 @@ def reset_sensors():
 @app.route('/set_control_mode/<mode>', methods=['POST'])
 def set_control_mode(mode):
     global current_control_mode, obstacle_avoidance_node
-    if mode in ['JOYSTICK', 'BUTTONS']:
+    if mode in ['JOYSTICK', 'BUTTONS', 'AI']:
         current_control_mode = mode
         sensor_data['control_mode'] = mode
+        if mode == 'AI':
+            def start_voice():
+                run_voice_ai_loop()
+
+            global ai_voice_thread
+            ai_voice_thread = threading.Thread(target=start_voice, daemon=True)
+            ai_voice_thread.start()
+
+
+
+
         
         if obstacle_avoidance_node is not None:
             obstacle_avoidance_node.active = False

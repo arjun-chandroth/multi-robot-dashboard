@@ -122,8 +122,8 @@ running = True
 arduino_connected = False
 current_control_mode = 'BUTTONS'
 camera_fps = 30
-camera_resolution = (640, 480)
-camera_quality = 70
+camera_resolution = (1280, 720)
+camera_quality = 30
 ai_voice_thread = None
 
 

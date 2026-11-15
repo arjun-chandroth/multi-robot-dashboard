@@ -579,11 +579,15 @@ function setControlMode(mode) {
         
         const modeElement = document.getElementById('control-mode');
         modeElement.textContent = `Control Mode: ${mode}`;
+        
         if (mode === 'JOYSTICK') {
             modeElement.classList.remove('status-connected');
             modeElement.classList.add('status-joystick');
+        } else if (mode === 'AI') {
+            modeElement.classList.remove('status-connected', 'status-joystick');
+            modeElement.classList.add('status-ai');
         } else {
-            modeElement.classList.remove('status-joystick');
+            modeElement.classList.remove('status-joystick', 'status-ai');
             modeElement.classList.add('status-connected');
         }
     })
@@ -591,6 +595,8 @@ function setControlMode(mode) {
         showStatus('Error changing control mode', false);
     });
 }
+
+
 
 function initButtonControls() {
     const forwardBtn = document.getElementById('forward-btn');
