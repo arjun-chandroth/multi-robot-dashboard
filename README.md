@@ -1,10 +1,11 @@
-# Multi-Robot Rover - try5
+# Multi-Robot Rover - try6
 
-This snapshot preserves the compact DHT11, impact-counter, and motor-control sketch.
+The rover adds sound-event sensing to the DHT11 and impact-counter baseline.
 
 ## Features
-- Retains four-direction motor control, DHT11 telemetry, and interrupt-driven impact counting.
-- Keeps the same pin assignments and serial protocol as try4.
+- Reads an analog sound sensor and counts threshold events with a cooldown.
+- Combines sound and impact flags/counts with DHT11 telemetry.
+- Retains motor direction controls and serial sensor reset behavior.
 
 ## Dependencies and hardware
 Arduino AVR board and the modules listed in the sketch pin map. Install DHT Sensor Library.
@@ -20,7 +21,7 @@ arduino-cli upload -p <PORT> --fqbn arduino:avr:mega firmware/rover
 ```
 
 ## Changes from the previous available try
-The selected try5 sketch is byte-for-byte identical to try4; no firmware behavior change is detectable. This commit preserves the available stage and gives it its own documentation.
+Adds sound threshold detection and sound fields to the serial telemetry frame. The previous available stage in this history is try5.
 
 ## Notes
-No additional behavior is inferred beyond the source.
+Tune the sound threshold and cooldown to the sensor and environment.
