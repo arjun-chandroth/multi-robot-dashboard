@@ -800,36 +800,12 @@ socket.on('lidar_update', function(data) {
     document.getElementById('lidar-status').textContent = 'LIDAR: Connected';
 });
 
-
-
-
-
 socket.on('gps_update', function(data) {
-    const { lat, lon } = data;
-    if (lat && lon && typeof lat === 'number' && typeof lon === 'number') {
-        const newLatLng = L.latLng(lat, lon);
-        if (marker && marker.setLatLng) {
-            marker.setLatLng(newLatLng);
-            map.panTo(newLatLng);
-        }
-
-        // Optional: Show coordinates
-        const gpsLabel = document.getElementById("gps-label");
-        if (gpsLabel) {
-            gpsLabel.textContent = `GPS: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
-        }
+    if (data.lat && data.lon && map && marker) {
+        marker.setLatLng([data.lat, data.lon]);
+        map.panTo([data.lat, data.lon]);
     }
 });
-
-
-
-
-
-
-
-
-
-
 
 socket.on('recording_status', function(data) {
     if (data.stream === 'fpv') {
@@ -943,3 +919,33 @@ function updateGauge(type, value, min, max) {
     }
 }
 
+
+
+
+
+
+
+
+// NEW JoyMode Function
+function activateNewJoystickMode() {
+    fetch('/set_control_mode/JOYMODE', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            console.log(data.status);
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active-mode'));
+            document.getElementById('new-joystick-btn').classList.add('active-mode');
+        });
+}
+
+function pollNewGamepad() {
+    const gamepads = navigator.getGamepads();
+    if (!gamepads) return;
+
+    const gp = gamepads[0];
+    if (!gp || !gp.connected) return;
+
+    const axes = gp.axes.map(a => parseFloat(a.toFixed(1)));
+    socket.emit('joystick_input', { axes });
+}
+
+setInterval(pollNewGamepad, 100); // poll every 100ms

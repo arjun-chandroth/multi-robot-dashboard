@@ -1115,7 +1115,7 @@ def reset_sensors():
 @app.route('/set_control_mode/<mode>', methods=['POST'])
 def set_control_mode(mode):
     global current_control_mode, obstacle_avoidance_node
-    if mode in ['JOYSTICK', 'BUTTONS', 'AI']:
+    if mode in ['JOYSTICK', '	JOYMODE', 'BUTTONS', 'AI']:
         current_control_mode = mode
         sensor_data['control_mode'] = mode
         if True:
@@ -1201,6 +1201,51 @@ def handle_control(command):
             socketio.emit('control_error', {'message': str(e)})
             arduino_connected = False
             sensor_data['arduino_connected'] = False
+
+
+
+
+
+
+
+
+
+
+@socketio.on('joystick_input')
+def handle_joystick_input(data):
+    global arduino, arduino_connected
+    if not arduino_connected or arduino is None:
+        return
+
+    axes = data.get('axes', [])
+    if len(axes) < 4:
+        return
+
+    x = round(axes[3], 1)
+    y = round(axes[1], 1)
+
+    if y == 1.0:
+        command = 'F'
+    elif y == -1.0:
+        command = 'B'
+    elif x == 1.0:
+        command = 'L'
+    elif x == -1.0:
+        command = 'R'
+    else:
+        command = 'S'
+
+    try:
+        arduino.write(command.encode())
+    except Exception as e:
+        print(f"[Joystick] Error sending command {command}: {e}")
+
+
+
+
+
+
+
 
 @socketio.on('joystick')
 def handle_joystick(data):
