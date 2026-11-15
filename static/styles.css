@@ -58,11 +58,6 @@ body {
 
 
 
-#countdown {
-            font-size: 3em;
-            color: red;
-            margin: 20px;
-        }
 
 
 
@@ -1017,3 +1012,33 @@ body {
 
 
 
+/* Refresh Timer Styles */
+.refresh-timer-container {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-family: 'Roboto Mono', monospace;
+    color: #ff4444;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    border: 1px solid #ff444455;
+    margin-left: 0.5rem;
+}
+
+.refresh-label {
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+
+#refresh-timer {
+    font-weight: bold;
+    min-width: 20px;
+    text-align: center;
+    animation: pulse 1s infinite;
+}
+
+.refresh-seconds {
+    font-size: 0.8rem;
+    opacity: 0.8;
+}

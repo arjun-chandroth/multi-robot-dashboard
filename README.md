@@ -1,12 +1,11 @@
-# Multi-Robot Rover - try36
+# Multi-Robot Rover - try37
 
-The monolithic dashboard is split into modules for routing, hardware, cameras, AI, ROS 2, monitoring, configuration, and utilities.
+The modular backend is retained while the dashboard template, styles, and browser behavior are redesigned.
 
 ## Features
-- Introduces focused hardware, camera, AI, ROS 2, system-monitor, and utility modules.
-- Keeps Flask/Socket.IO routes and shared sensor data in the main app.
-- Adds centralized rover configuration and an installer script.
-- Retains camera, serial/gamepad controls, object detection, and telemetry.
+- Keeps the try36 backend modules and hardware integration.
+- Updates dashboard page, styling, and JavaScript interactions.
+- Retains camera, sensor gauges, control modes, recording, AI, and ROS 2 features.
 
 ## Dependencies and hardware
 Python 3 with Flask, Flask-SocketIO, OpenCV, NumPy, psutil, pyserial, pyttsx3, and Ultralytics. ROS 2 `rclpy`/`sensor_msgs` are system dependencies. A local YOLO weights file and hardware are needed for those features.
@@ -23,7 +22,7 @@ python app.py
 ```
 
 ## Changes from the previous available try
-Major architecture refactor from one large Python file into focused modules while preserving dashboard scope. The previous available stage in this history is try32.
+Primarily a UI redesign; the Python module set remains the same. The previous available stage in this history is try36.
 
 ## Notes
-Review the installer before running it; configuration and hardware assumptions require local review.
+No physical-hardware validation is implied by the updated browser interface.

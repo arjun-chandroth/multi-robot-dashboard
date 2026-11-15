@@ -17,19 +17,11 @@ let marker = null;
 
 
 
-let refreshTimer = 30;
-let refreshInterval = null;
 
 
 
 
 
-
-let seconds = 30;
-        setInterval(function() {
-            seconds--;
-            document.getElementById('countdown').textContent = seconds;
-        },10000);
 
 
 
@@ -46,20 +38,36 @@ document.addEventListener('DOMContentLoaded', function() {
   
 
 
+    const timerElement = document.getElementById('refresh-timer');
+    if (timerElement) {
+        let seconds = 30;
+        timerElement.textContent = seconds;
 
+        const timerInterval = setInterval(() => {
+            seconds--;
+            console.log('Timer tick:', seconds); // Debug log
+            timerElement.textContent = seconds;
+            
+            if (seconds <= 0) {
+                clearInterval(timerInterval);
+                console.log('Reloading page...'); // Debug log
+                window.location.reload();
+            }
+        }, 1000);
 
+        // Reset timer on user activity
+        const resetTimer = () => {
+            seconds = 30;
+            timerElement.textContent = seconds;
+        };
+        
+        document.addEventListener('mousemove', resetTimer);
+        document.addEventListener('keydown', resetTimer);
+        document.addEventListener('click', resetTimer);
+    } else {
+        console.error('Could not find timer element!');
+    }
 
-
-
-
-
-
-
-
-     refreshInterval = setInterval(() => {
-        refreshTimer--;
-        updateRefreshTimer();
-    }, 1000);
 
 
 
@@ -179,10 +187,7 @@ function updateBatteryStatus(level, isPlugged) {
 
 
 
-setInterval(function() {
-            seconds--;
-            document.getElementById('countdown').textContent = seconds;
-        }, 1000);
+
 
 
 
@@ -191,19 +196,20 @@ setInterval(function() {
 
 function updateRefreshTimer() {
     const timerElement = document.getElementById('refresh-timer');
+    console.log('Updating timer:', refreshTimer); // Debug log
+    
     if (timerElement) {
         timerElement.textContent = refreshTimer;
         
         if (refreshTimer <= 0) {
-            timerElement.textContent = '0';
+            clearInterval(refreshInterval);
             setTimeout(() => {
                 window.location.reload();
-            }, 1000); // 1 second delay at 0 before refresh
+            }, 1000);
         }
+        refreshTimer--; // Decrement after update
     }
 }
-
-
 
 
 
@@ -949,3 +955,4 @@ function pollNewGamepad() {
 }
 
 setInterval(pollNewGamepad, 100); // poll every 100ms
+

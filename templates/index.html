@@ -3,9 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="30">
-
-
     <title>DR0B0TZ</title>
     <link rel="icon" href="#" type="image/x-icon">
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
@@ -14,36 +11,32 @@
     <link href="https://cdn.jsdelivr.net/npm/@fontsource/exo@5.0.8/index.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/@fontsource/roboto-mono@5.0.8/index.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
-
-    <link href="https://cdn.jsdelivr.net/npm/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
-
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.14.0.min.js"></script>
     <script src="{{ url_for('static', filename='main.js') }}" defer></script>
-    <!-- Slider Switch CSS (place in your <style> block) -->
-<style>
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 44px; height: 24px;
-  margin-left: 8px; vertical-align: middle;
-}
-.switch input { opacity: 0; width: 0; height: 0; }
-.slider {
-  position: absolute; cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background-color: #ccc; transition: .4s; border-radius: 24px;
-}
-.slider:before {
-  position: absolute; content: "";
-  height: 18px; width: 18px; left: 3px; bottom: 3px;
-  background-color: white; transition: .4s;
-  border-radius: 50%;
-}
-input:checked + .slider { background-color: #2196F3; }
-input:checked + .slider:before { transform: translateX(20px); }
-</style> 
+    <style>
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px; height: 24px;
+      margin-left: 8px; vertical-align: middle;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #ccc; transition: .4s; border-radius: 24px;
+    }
+    .slider:before {
+      position: absolute; content: "";
+      height: 18px; width: 18px; left: 3px; bottom: 3px;
+      background-color: white; transition: .4s;
+      border-radius: 50%;
+    }
+    input:checked + .slider { background-color: #2196F3; }
+    input:checked + .slider:before { transform: translateX(20px); }
+    </style> 
 </head>
 <body>
     <div class="header">
@@ -54,98 +47,65 @@ input:checked + .slider:before { transform: translateX(20px); }
                 </a>
             </div>
             <h1 class="title">Autonomous Aircraft Ground Operations Robots</h1>
-            
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
             <div class="status-indicators">
-    <!-- Controller Status -->
-    <div id="arduino-status" class="status-icon" data-tooltip="Controller: Disconnected">
-        <i class='bx bx-chip'></i>
-    </div>
-    
-    <!-- Camera Status -->
-    <div id="camera-status" class="status-icon" data-tooltip="Front Camera: Disconnected">
-        <i class='bx bx-camera'></i>
-    </div>
-    
-    <!-- Rear Camera Status -->
-    <div id="rear-camera-status" class="status-icon" data-tooltip="Rear Camera: Disconnected">
-        <i class='bx bx-camera-movie'></i>
-    </div>
-    
-    <!-- LIDAR Status -->
-    <div id="lidar-status" class="status-icon" data-tooltip="LIDAR: Disconnected">
-        <i class='bx bx-radar'></i>
-    </div>
-    
-    <!-- Control Mode -->
-    <div id="control-mode" class="status-icon" data-tooltip="Control Mode: Manual">
-        <i class='bx bx-joystick'></i>
-    </div>
-    
-    <!-- WiFi Signal Strength -->
-    <div id="wifi-status" class="status-icon" data-tooltip="WiFi: Medium">
-        <i class='bx bx-wifi'></i>
-    </div>
-    
-    <!-- GPS Status -->
-    <div id="gps-status" class="status-icon" data-tooltip="GPS: Disconnected">
-        <i class='bx bx-map'></i>
-    </div>
-    
-    <!-- Battery Level -->
-    <div id="battery-status" class="status-icon" data-tooltip="Battery: 85%">
-        <i class='bx bx-battery'></i>
-    </div>
-
-    <div id="countdown">30</div>
-</div>
-
+                <div id="arduino-status" class="status-icon" data-tooltip="Controller: Disconnected">
+                    <i class='bx bx-chip'></i>
+                </div>
+                <div id="camera-status" class="status-icon" data-tooltip="Front Camera: Disconnected">
+                    <i class='bx bx-camera'></i>
+                </div>
+                <div id="rear-camera-status" class="status-icon" data-tooltip="Rear Camera: Disconnected">
+                    <i class='bx bx-camera-movie'></i>
+                </div>
+                <div id="lidar-status" class="status-icon" data-tooltip="LIDAR: Disconnected">
+                    <i class='bx bx-radar'></i>
+                </div>
+                <div id="control-mode" class="status-icon" data-tooltip="Control Mode: Manual">
+                    <i class='bx bx-joystick'></i>
+                </div>
+                <div id="wifi-status" class="status-icon" data-tooltip="WiFi: Medium">
+                    <i class='bx bx-wifi'></i>
+                </div>
+                <div id="gps-status" class="status-icon" data-tooltip="GPS: Disconnected">
+                    <i class='bx bx-map'></i>
+                </div>
+                <div id="battery-status" class="status-icon" data-tooltip="Battery: 85%">
+                    <i class='bx bx-battery'></i>
+                </div>
+                <div class="refresh-timer-container">
+                    <span class="refresh-label">Refresh:</span>
+                    <span id="refresh-timer">30</span>
+                    <span class="refresh-seconds">s</span>
+                </div>
+            </div>
         </div>
     </div>
 
     <div class="main-container">
-        <!-- Row 1 -->
-        <!-- Row 1 -->
+        <!-- Row 1: 4 columns -->
         <div class="grid-row">
-            <!-- FPV -->
+            <!-- FPV Camera -->
             <div class="grid-item">
                 <div class="fullscreen-btn" onclick="toggleFullscreen(this.parentElement)">
                     <i class='bx bx-fullscreen'></i>
                 </div>
                 <div class="panel-heading">
-                <i class='bx bx-camera'></i>
-                <span>FPV</span>
-                <!-- The toggle goes here as a <span> so it's inline, not block -->
-                <span class="stream-toggle" style="margin-left:14px; display:inline-flex; align-items:center;">
-                    <span id="fpv-mode-label" style="font-size:0.93em; margin-right:5px;">Processed</span>
-                    <label class="switch" style="margin-bottom:0;">
-                        <input type="checkbox" id="fpv-toggle">
-                        <span class="slider round"></span>
-                    </label>
-                </span>
-                <div class="panel-heading-actions">
-                    <div class="record-btn" id="fpv-record-btn" onclick="toggleFpvRecording()">
-                        <i class='bx bxs-video-recording'></i>
-                        <span>Start Recording</span>
+                    <i class='bx bx-camera'></i>
+                    <span>FPV</span>
+                    <span class="stream-toggle" style="margin-left:14px; display:inline-flex; align-items:center;">
+                        <span id="fpv-mode-label" style="font-size:0.93em; margin-right:5px;">Processed</span>
+                        <label class="switch" style="margin-bottom:0;">
+                            <input type="checkbox" id="fpv-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </span>
+                    <div class="panel-heading-actions">
+                        <div class="record-btn" id="fpv-record-btn" onclick="toggleFpvRecording()">
+                            <i class='bx bxs-video-recording'></i>
+                            <span>Start Recording</span>
+                        </div>
                     </div>
                 </div>
-            </div>
-
-
                 <div class="video-feed">
                     <img id="video" src="/video_feed_processed">
                     <div class="video-overlay">
@@ -156,31 +116,28 @@ input:checked + .slider:before { transform: translateX(20px); }
                 </div>
             </div>
             
-            <!-- Rear View -->
+            <!-- Rear Camera -->
             <div class="grid-item">
                 <div class="fullscreen-btn" onclick="toggleFullscreen(this.parentElement)">
                     <i class='bx bx-fullscreen'></i>
                 </div>
                 <div class="panel-heading">
-                <i class='bx bx-camera-movie'></i>
-                <span>Rear View</span>
-                <!-- Toggle stream control as inline span -->
-                <span class="stream-toggle" style="margin-left:14px; display:inline-flex; align-items:center;">
-                    <span id="rear-mode-label" style="font-size: 0.93em; margin-right:5px;">Processed</span>
-                    <label class="switch" style="margin-bottom:0;">
-                        <input type="checkbox" id="rear-toggle">
-                        <span class="slider round"></span>
-                    </label>
-                </span>
-                <div class="panel-heading-actions">
-                    <div class="record-btn" id="rear-record-btn" onclick="toggleRearRecording()">
-                        <i class='bx bxs-video-recording'></i>
-                        <span>Start Recording</span>
+                    <i class='bx bx-camera-movie'></i>
+                    <span>Rear View</span>
+                    <span class="stream-toggle" style="margin-left:14px; display:inline-flex; align-items:center;">
+                        <span id="rear-mode-label" style="font-size: 0.93em; margin-right:5px;">Processed</span>
+                        <label class="switch" style="margin-bottom:0;">
+                            <input type="checkbox" id="rear-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </span>
+                    <div class="panel-heading-actions">
+                        <div class="record-btn" id="rear-record-btn" onclick="toggleRearRecording()">
+                            <i class='bx bxs-video-recording'></i>
+                            <span>Start Recording</span>
+                        </div>
                     </div>
                 </div>
-            </div>
-
-
                 <div class="video-feed">
                     <img id="rear-video" src="/rear_video_feed_processed">
                     <div class="video-overlay">
@@ -190,12 +147,6 @@ input:checked + .slider:before { transform: translateX(20px); }
                     </div>
                 </div>
             </div>
-        </div>
-
-
-
-
-
             
             <!-- GPS Tracking -->
             <div class="grid-item">
@@ -367,7 +318,7 @@ input:checked + .slider:before { transform: translateX(20px); }
             </div>
         </div>
         
-        <!-- Row 2 -->
+        <!-- Row 2: 4 columns -->
         <div class="grid-row">
             <!-- LIDAR Visualization -->
             <div class="grid-item">
@@ -384,7 +335,7 @@ input:checked + .slider:before { transform: translateX(20px); }
                     <div class="radar-crosshair-v"></div>
                     <div class="radar-sweep"></div>
                     <div class="radar-ping"></div>
-                    <canvas id="lidar-canvas"></canvas>
+                    <canvas id="lidar-canvas" willReadFrequently="true"></canvas>
                 </div>
             </div>
             
@@ -430,17 +381,12 @@ input:checked + .slider:before { transform: translateX(20px); }
                             <span>🤖</span> Autonomous
                         </div>
                         <div class="mode-btn" onclick="setControlMode('AI')">
-                            <span>🧠</span> AI Mode
+                            <span>🧠</span> AI
                         </div>
                         <div class="mode-btn" onclick="activateNewJoystickMode()" id="new-joystick-btn">
-                            <span>🕹️</span> JoyMode
+                            <span>🕹️</span> Joy Mode
                         </div>
-
-
-
-
                     </div>
-                    
                     <div class="controls-grid">
                         <div class="control-btn" id="nw-btn">
                             <i class='bx bx-up-arrow-alt'></i>
@@ -496,7 +442,7 @@ input:checked + .slider:before { transform: translateX(20px); }
             </div>
         </div>
     </div>
-    
+
     <div class="footer">
         <div class="footer-links">
             <a href="#">About</a>
@@ -513,37 +459,66 @@ input:checked + .slider:before { transform: translateX(20px); }
     <div id="status-message" class="status-message"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/leaflet.min.js"></script>
-    <!-- Slider Toggle JavaScript (place at the end of your HTML body) -->
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    // FPV stream toggle
-    const fpvToggle = document.getElementById('fpv-toggle');
-    const fpvImg = document.getElementById('video');
-    const fpvModeLabel = document.getElementById('fpv-mode-label');
-    fpvToggle.addEventListener('change', function () {
-        if (fpvToggle.checked) {
-            fpvImg.src = "/video_feed_raw";
-            fpvModeLabel.textContent = "Raw";
-        } else {
-            fpvImg.src = "/video_feed_processed";
-            fpvModeLabel.textContent = "Processed";
-        }
-    });
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // FPV stream toggle
+        const fpvToggle = document.getElementById('fpv-toggle');
+        const fpvImg = document.getElementById('video');
+        const fpvModeLabel = document.getElementById('fpv-mode-label');
+        fpvToggle.addEventListener('change', function () {
+            if (fpvToggle.checked) {
+                fpvImg.src = "/video_feed_raw";
+                fpvModeLabel.textContent = "Raw";
+            } else {
+                fpvImg.src = "/video_feed_processed";
+                fpvModeLabel.textContent = "Processed";
+            }
+        });
 
-    // Rear stream toggle
-    const rearToggle = document.getElementById('rear-toggle');
-    const rearImg = document.getElementById('rear-video');
-    const rearModeLabel = document.getElementById('rear-mode-label');
-    rearToggle.addEventListener('change', function () {
-        if (rearToggle.checked) {
-            rearImg.src = "/rear_video_feed_raw";
-            rearModeLabel.textContent = "Raw";
-        } else {
-            rearImg.src = "/rear_video_feed_processed";
-            rearModeLabel.textContent = "Processed";
+        // Rear stream toggle
+        const rearToggle = document.getElementById('rear-toggle');
+        const rearImg = document.getElementById('rear-video');
+        const rearModeLabel = document.getElementById('rear-mode-label');
+        rearToggle.addEventListener('change', function () {
+            if (rearToggle.checked) {
+                rearImg.src = "/rear_video_feed_raw";
+                rearModeLabel.textContent = "Raw";
+            } else {
+                rearImg.src = "/rear_video_feed_processed";
+                rearModeLabel.textContent = "Processed";
+            }
+        });
+
+        // Timer implementation
+        const timerElement = document.getElementById('refresh-timer');
+        if (!timerElement) {
+            console.error('Could not find timer element');
+            return;
         }
+
+        let seconds = 30;
+        timerElement.textContent = seconds;
+
+        const timerInterval = setInterval(() => {
+            seconds--;
+            timerElement.textContent = seconds;
+            
+            if (seconds <= 0) {
+                clearInterval(timerInterval);
+                window.location.reload();
+            }
+        }, 1000);
+
+        // Reset timer on user activity
+        const resetTimer = () => {
+            seconds = 30;
+            timerElement.textContent = seconds;
+        };
+        
+        document.addEventListener('mousemove', resetTimer);
+        document.addEventListener('keydown', resetTimer);
+        document.addEventListener('click', resetTimer);
     });
-});
-</script>
+    </script>
 </body>
 </html>
