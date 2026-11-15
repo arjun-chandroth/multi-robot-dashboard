@@ -1,10 +1,10 @@
 #include <DHT.h>
 
-// Motor control pins
-#define IN1 5
-#define IN2 6
-#define IN3 9
-#define IN4 10
+// Motor control pins (adjusted for Mega)
+#define IN1 22
+#define IN2 24
+#define IN3 26
+#define IN4 28
 
 // DHT11 Sensor
 #define DHTPIN 2
@@ -21,7 +21,7 @@ bool soundDetected = false;
 unsigned long soundLedStartTime = 0;
 bool soundLedActive = false;
 
-// Impact Sensor
+// Impact Sensor (using interrupt-capable pin on Mega)
 #define SHOCK_PIN 3
 #define IMPACT_WINDOW_MS 50
 #define MIN_BOUNCES 1
@@ -42,10 +42,10 @@ bool impactLedActive = false;
 bool buzzerActive = false;
 unsigned long buzzerStartTime = 0;
 
-// SMD RGB LED (Common Cathode)
-#define LED_RED_PIN 11
-#define LED_GREEN_PIN 12
-#define LED_BLUE_PIN 13
+// SMD RGB LED (Common Cathode) - using PWM-capable pins
+#define LED_RED_PIN 9
+#define LED_GREEN_PIN 10
+#define LED_BLUE_PIN 11
 unsigned long tiltLedStartTime = 0;
 bool tiltLedActive = false;
 
@@ -57,11 +57,18 @@ unsigned long lastTouchTime = 0;
 #define TOUCH_COOLDOWN 500
 
 // Tilt Sensor (HW-505)
-#define TILT_PIN 7
+#define TILT_PIN 5
 bool tiltDetected = false;
 int tiltEvents = 0;
 unsigned long lastTiltTime = 0;
 #define TILT_COOLDOWN 1000
+
+// PIR Motion Sensor
+#define PIR_PIN 6
+bool pirDetected = false;
+int pirEvents = 0;
+unsigned long lastPirTime = 0;
+#define PIR_COOLDOWN 2000
 
 // Sensor timing
 unsigned long lastSensorReadTime = 0;
@@ -191,15 +198,26 @@ void checkTiltSensor() {
   }
 }
 
+void checkPirSensor() {
+  int pirValue = digitalRead(PIR_PIN);
+  if (pirValue == HIGH && millis() - lastPirTime > PIR_COOLDOWN) {
+    pirEvents++;
+    pirDetected = true;
+    lastPirTime = millis();
+  }
+}
+
 void resetAllSensors() {
   confirmedImpacts = 0;
   soundEvents = 0;
   touchEvents = 0;
   tiltEvents = 0;
+  pirEvents = 0;
   impactDetected = false;
   soundDetected = false;
   touchDetected = false;
   tiltDetected = false;
+  pirDetected = false;
   
   // Turn off all LEDs
   digitalWrite(LED_RED_PIN, LOW);
@@ -247,15 +265,19 @@ void sendSensorData() {
   Serial.print(tiltEvents);
   Serial.print(",");
   Serial.print(tiltDetected ? "1" : "0");
+  Serial.print(",");
+  Serial.print(pirEvents);
+  Serial.print(",");
+  Serial.print(pirDetected ? "1" : "0");
   Serial.println();
   
   impactDetected = false;
   soundDetected = false;
   touchDetected = false;
   tiltDetected = false;
+  pirDetected = false;
 }
 
-// [Rest of your motor control functions remain the same]
 void forward() {
   digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
   digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
@@ -310,6 +332,7 @@ void setup() {
   pinMode(SHOCK_PIN, INPUT_PULLUP);
   pinMode(TOUCH_PIN, INPUT);
   pinMode(TILT_PIN, INPUT_PULLUP);
+  pinMode(PIR_PIN, INPUT);
   
   // Initialize buzzer
   pinMode(BUZZER_PIN, OUTPUT);
@@ -318,9 +341,10 @@ void setup() {
   // Initialize RGB LED
   setupLEDs();
   
+  // Attach interrupt - Mega has more interrupt pins than Uno
   attachInterrupt(digitalPinToInterrupt(SHOCK_PIN), handleImpact, FALLING);
   
-  Serial.println("System initialized");
+  Serial.println("System initialized - Mega Version");
 }
 
 void loop() {
@@ -352,6 +376,7 @@ void loop() {
   checkSoundSensor();
   checkTouchSensor();
   checkTiltSensor();
+  checkPirSensor();
   
   // Send sensor data at regular intervals
   if (millis() - lastSensorReadTime > SENSOR_READ_INTERVAL) {

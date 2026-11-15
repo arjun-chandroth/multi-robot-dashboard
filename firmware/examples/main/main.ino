@@ -1,10 +1,10 @@
 #include <DHT.h>
 
-// Motor control pins
-#define IN1 5
-#define IN2 6
-#define IN3 9
-#define IN4 10
+// Motor control pins (adjusted for Mega)
+#define IN1 22
+#define IN2 24
+#define IN3 26
+#define IN4 28
 
 // DHT11 Sensor
 #define DHTPIN 2
@@ -18,8 +18,10 @@ unsigned long lastSoundTime = 0;
 #define SOUND_COOLDOWN 1000
 int soundEvents = 0;
 bool soundDetected = false;
+unsigned long soundLedStartTime = 0;
+bool soundLedActive = false;
 
-// Impact Sensor
+// Impact Sensor (using interrupt-capable pin on Mega)
 #define SHOCK_PIN 3
 #define IMPACT_WINDOW_MS 50
 #define MIN_BOUNCES 1
@@ -31,12 +33,21 @@ volatile byte bounceCount = 0;
 volatile int confirmedImpacts = 0;
 bool impactDetected = false;
 unsigned long lastImpactTime = 0;
+unsigned long impactLedStartTime = 0;
+bool impactLedActive = false;
 
 // Buzzer
 #define BUZZER_PIN 8
-#define BUZZER_DURATION 1000  // 1 second beep
+#define BUZZER_DURATION 1000
 bool buzzerActive = false;
 unsigned long buzzerStartTime = 0;
+
+// SMD RGB LED (Common Cathode) - using PWM-capable pins
+#define LED_RED_PIN 9
+#define LED_GREEN_PIN 10
+#define LED_BLUE_PIN 11
+unsigned long tiltLedStartTime = 0;
+bool tiltLedActive = false;
 
 // Touch Sensor
 #define TOUCH_PIN 4
@@ -46,11 +57,18 @@ unsigned long lastTouchTime = 0;
 #define TOUCH_COOLDOWN 500
 
 // Tilt Sensor (HW-505)
-#define TILT_PIN 7
+#define TILT_PIN 5
 bool tiltDetected = false;
 int tiltEvents = 0;
 unsigned long lastTiltTime = 0;
 #define TILT_COOLDOWN 1000
+
+// PIR Motion Sensor
+#define PIR_PIN 6
+bool pirDetected = false;
+int pirEvents = 0;
+unsigned long lastPirTime = 0;
+#define PIR_COOLDOWN 2000
 
 // Sensor timing
 unsigned long lastSensorReadTime = 0;
@@ -59,6 +77,15 @@ unsigned long lastSensorReadTime = 0;
 // Motor state
 char currentMotorState = 'S';
 
+void setupLEDs() {
+  pinMode(LED_RED_PIN, OUTPUT);
+  pinMode(LED_GREEN_PIN, OUTPUT);
+  pinMode(LED_BLUE_PIN, OUTPUT);
+  digitalWrite(LED_RED_PIN, LOW);
+  digitalWrite(LED_GREEN_PIN, LOW);
+  digitalWrite(LED_BLUE_PIN, LOW);
+}
+
 void handleBuzzer() {
   if (buzzerActive && (millis() - buzzerStartTime >= BUZZER_DURATION)) {
     digitalWrite(BUZZER_PIN, LOW);
@@ -66,10 +93,48 @@ void handleBuzzer() {
   }
 }
 
+void handleLEDs() {
+  // Handle sound LED (Blue)
+  if (soundLedActive && (millis() - soundLedStartTime >= 1000)) {
+    digitalWrite(LED_BLUE_PIN, LOW);
+    soundLedActive = false;
+  }
+  
+  // Handle impact LED (Red)
+  if (impactLedActive && (millis() - impactLedStartTime >= 1000)) {
+    digitalWrite(LED_RED_PIN, LOW);
+    impactLedActive = false;
+  }
+  
+  // Handle tilt LED (Green)
+  if (tiltLedActive && (millis() - tiltLedStartTime >= 1000)) {
+    digitalWrite(LED_GREEN_PIN, LOW);
+    tiltLedActive = false;
+  }
+}
+
 void triggerBuzzer() {
   digitalWrite(BUZZER_PIN, HIGH);
   buzzerActive = true;
   buzzerStartTime = millis();
+}
+
+void triggerSoundLED() {
+  digitalWrite(LED_BLUE_PIN, HIGH);
+  soundLedActive = true;
+  soundLedStartTime = millis();
+}
+
+void triggerImpactLED() {
+  digitalWrite(LED_RED_PIN, HIGH);
+  impactLedActive = true;
+  impactLedStartTime = millis();
+}
+
+void triggerTiltLED() {
+  digitalWrite(LED_GREEN_PIN, HIGH);
+  tiltLedActive = true;
+  tiltLedStartTime = millis();
 }
 
 void handleImpact() {
@@ -94,6 +159,9 @@ void handleImpact() {
     if (!buzzerActive) {
       triggerBuzzer();
     }
+    if (!impactLedActive) {
+      triggerImpactLED();
+    }
   }
 }
 
@@ -103,6 +171,9 @@ void checkSoundSensor() {
     soundEvents++;
     soundDetected = true;
     lastSoundTime = millis();
+    if (!soundLedActive) {
+      triggerSoundLED();
+    }
   }
 }
 
@@ -121,6 +192,18 @@ void checkTiltSensor() {
     tiltEvents++;
     tiltDetected = true;
     lastTiltTime = millis();
+    if (!tiltLedActive) {
+      triggerTiltLED();
+    }
+  }
+}
+
+void checkPirSensor() {
+  int pirValue = digitalRead(PIR_PIN);
+  if (pirValue == HIGH && millis() - lastPirTime > PIR_COOLDOWN) {
+    pirEvents++;
+    pirDetected = true;
+    lastPirTime = millis();
   }
 }
 
@@ -129,10 +212,20 @@ void resetAllSensors() {
   soundEvents = 0;
   touchEvents = 0;
   tiltEvents = 0;
+  pirEvents = 0;
   impactDetected = false;
   soundDetected = false;
   touchDetected = false;
   tiltDetected = false;
+  pirDetected = false;
+  
+  // Turn off all LEDs
+  digitalWrite(LED_RED_PIN, LOW);
+  digitalWrite(LED_GREEN_PIN, LOW);
+  digitalWrite(LED_BLUE_PIN, LOW);
+  soundLedActive = false;
+  impactLedActive = false;
+  tiltLedActive = false;
 }
 
 bool readDHTData(float &temperature, float &humidity) {
@@ -172,12 +265,17 @@ void sendSensorData() {
   Serial.print(tiltEvents);
   Serial.print(",");
   Serial.print(tiltDetected ? "1" : "0");
+  Serial.print(",");
+  Serial.print(pirEvents);
+  Serial.print(",");
+  Serial.print(pirDetected ? "1" : "0");
   Serial.println();
   
   impactDetected = false;
   soundDetected = false;
   touchDetected = false;
   tiltDetected = false;
+  pirDetected = false;
 }
 
 void forward() {
@@ -234,19 +332,27 @@ void setup() {
   pinMode(SHOCK_PIN, INPUT_PULLUP);
   pinMode(TOUCH_PIN, INPUT);
   pinMode(TILT_PIN, INPUT_PULLUP);
+  pinMode(PIR_PIN, INPUT);
   
   // Initialize buzzer
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
   
+  // Initialize RGB LED
+  setupLEDs();
+  
+  // Attach interrupt - Mega has more interrupt pins than Uno
   attachInterrupt(digitalPinToInterrupt(SHOCK_PIN), handleImpact, FALLING);
   
-  Serial.println("System initialized");
+  Serial.println("System initialized - Mega Version");
 }
 
 void loop() {
   // Handle buzzer timing
   handleBuzzer();
+  
+  // Handle LED timing
+  handleLEDs();
 
   // Handle serial commands
   if (Serial.available() > 0) {
@@ -270,6 +376,7 @@ void loop() {
   checkSoundSensor();
   checkTouchSensor();
   checkTiltSensor();
+  checkPirSensor();
   
   // Send sensor data at regular intervals
   if (millis() - lastSensorReadTime > SENSOR_READ_INTERVAL) {

@@ -1,27 +1,37 @@
-# Multi-Robot Rover - try11
+# Multi-Robot Rover - try12
 
-Tilt detection is added, with separate buzzer and RGB-LED experiments retained alongside the main sketch.
+The project grows from standalone firmware into a Raspberry Pi/Flask control prototype with an IR-capable Arduino sketch.
 
 ## Features
-- Main firmware tracks DHT11, impact, sound, touch, and tilt events.
-- Includes standalone buzzer and RGB LED sketches under `firmware/examples/`.
-- Retains motor control and sensor reset commands.
+- Adds Flask/Socket.IO dashboard routes for serial sensor data, motor commands, camera streaming, and host status.
+- The main Arduino sketch includes IR remote control, DHT11, impact, sound, touch, and tilt paths.
+- Includes exploratory firmware sketches and a dashboard template.
+- Supports camera and sensor-log/recording routes.
 
 ## Dependencies and hardware
-Arduino AVR board and the modules listed in the sketch pin map. Install DHT Sensor Library.
+Python 3 with Flask, Flask-SocketIO, OpenCV, psutil, and pyserial; This snapshot also requires NumPy. Arduino AVR board and the modules identified in the firmware. No pinned Python dependency manifest is provided.
 
 ## Setup and run
-Install the board core/libraries, review pin assignments and hardware polarity, then compile/upload the sketch shown below.
+Create a virtual environment, install the Python packages, configure the serial port and camera, upload the Arduino sketch, and start the dashboard.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install flask flask-socketio opencv-python psutil pyserial numpy
+python car_control.py
+```
+
+Build the Arduino sketch separately:
 
 ```bash
 arduino-cli core install arduino:avr
-arduino-cli lib install "DHT sensor library"
+arduino-cli lib install "DHT sensor library" IRremote
 arduino-cli compile --fqbn arduino:avr:mega firmware/rover
 arduino-cli upload -p <PORT> --fqbn arduino:avr:mega firmware/rover
 ```
 
 ## Changes from the previous available try
-Adds tilt sensing and two independent sketches for buzzer and RGB indicator outputs. The previous available stage in this history is try10.
+Introduces the Python dashboard and camera/server code, plus an IR remote control path in the firmware. The previous available stage in this history is try11.
 
 ## Notes
-Example sketches are independent Arduino programs and should be built separately.
+The server expects camera/serial hardware; run it only on a trusted local network. Multiple alternate firmware sketches are preserved separately.
