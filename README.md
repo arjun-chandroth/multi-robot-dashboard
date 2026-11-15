@@ -1,11 +1,11 @@
-# Multi-Robot Rover - try13
+# Multi-Robot Rover - try14
 
-The Flask dashboard continues while the Arduino sensor set is revised to include PIR motion and rain detection.
+The sensor dashboard gains accelerometer measurements and a browser-side visualization.
 
 ## Features
-- Retains the serial-driven rover and web dashboard with camera/system status.
-- Adds PIR and rain readings to the main firmware telemetry.
-- Keeps periodic DHT, impact, sound, touch, and tilt reporting.
+- Adds ADXL345 X/Y/Z readings to rover telemetry.
+- Adds an accelerometer plot alongside the sensor and camera panels.
+- Retains serial motor commands, camera streaming, and host metrics.
 
 ## Dependencies and hardware
 Python 3 with Flask, Flask-SocketIO, OpenCV, psutil, and pyserial; No NumPy dependency is needed by this stage. Arduino AVR board and the modules identified in the firmware. No pinned Python dependency manifest is provided.
@@ -24,13 +24,13 @@ Build the Arduino sketch separately:
 
 ```bash
 arduino-cli core install arduino:avr
-arduino-cli lib install "DHT sensor library"
+arduino-cli lib install "DHT sensor library" "Adafruit Unified Sensor" "Adafruit ADXL345"
 arduino-cli compile --fqbn arduino:avr:mega firmware/rover
 arduino-cli upload -p <PORT> --fqbn arduino:avr:mega firmware/rover
 ```
 
 ## Changes from the previous available try
-Adds PIR and rain inputs; the previous IR-remote path is absent from the primary sketch. The previous available stage in this history is try12.
+Adds an ADXL345 accelerometer to firmware and exposes its axes in the dashboard. The previous available stage in this history is try13.
 
 ## Notes
-Review sensor polarity and configured pin numbers before powering the motor driver.
+Accelerometer axis orientation depends on board mounting.

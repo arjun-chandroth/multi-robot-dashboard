@@ -50,6 +50,9 @@ sensor_data = {
     'pir_detected': False,
     'rain_count': 0,
     'rain_detected': False,
+    'accel_x': 0.0,
+    'accel_y': 0.0,
+    'accel_z': 0.0,
     'system_temp': None,
     'cpu_usage': None,
     'memory_usage': None,
@@ -116,6 +119,11 @@ def log_sensor_data():
             'rain': {
                 'count': sensor_data['rain_count'],
                 'detected': sensor_data['rain_detected']
+            },
+            'accelerometer': {
+                'x': sensor_data['accel_x'],
+                'y': sensor_data['accel_y'],
+                'z': sensor_data['accel_z']
             }
         },
         'system': {
@@ -235,7 +243,7 @@ def read_sensor_data():
                 line = arduino.readline().decode('utf-8').strip()
                 if line.startswith('SENSORS:'):
                     parts = line[8:].split(',')
-                    if len(parts) == 14:
+                    if len(parts) == 17:
                         sensor_data.update({
                             'temperature': float(parts[0]) if parts[0] != 'NaN' else None,
                             'humidity': float(parts[1]) if parts[1] != 'NaN' else None,
@@ -251,6 +259,9 @@ def read_sensor_data():
                             'pir_detected': bool(int(parts[11])),
                             'rain_count': int(parts[12]),
                             'rain_detected': bool(int(parts[13])),
+                            'accel_x': float(parts[14]),
+                            'accel_y': float(parts[15]),
+                            'accel_z': float(parts[16]),
                             'last_update': datetime.now().strftime('%H:%M:%S'),
                             'arduino_connected': True
                         })
@@ -270,6 +281,9 @@ def read_sensor_data():
                             'pir_detected': sensor_data['pir_detected'],
                             'rain_count': sensor_data['rain_count'],
                             'rain_detected': sensor_data['rain_detected'],
+                            'accel_x': f"{sensor_data['accel_x']:.2f}",
+                            'accel_y': f"{sensor_data['accel_y']:.2f}",
+                            'accel_z': f"{sensor_data['accel_z']:.2f}",
                             'system_temp': f"{sensor_data['system_temp'] or '--'}°C",
                             'cpu_usage': f"{sensor_data['cpu_usage'] or '--'}%",
                             'memory_usage': f"{sensor_data['memory_usage'] or '--'}%",
@@ -278,6 +292,11 @@ def read_sensor_data():
                             'control_mode': sensor_data['control_mode']
                         }
                         socketio.emit('sensor_update', display_data)
+                        socketio.emit('accel_update', {
+                            'x': sensor_data['accel_x'],
+                            'y': sensor_data['accel_y'],
+                            'z': sensor_data['accel_z']
+                        })
                 elif line:  # Print any other messages from Arduino
                     print(f"Arduino: {line}")
         except Exception as e:
@@ -318,6 +337,9 @@ def generate_frames():
                         y_position += 30
                         cv2.putText(frame, f"Rain: {'YES' if sensor_data['rain_detected'] else 'NO'}", (10, y_position),
                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
+                        y_position += 30
+                        cv2.putText(frame, f"Accel: X={sensor_data['accel_x']:.1f} Y={sensor_data['accel_y']:.1f} Z={sensor_data['accel_z']:.1f}", 
+                                   (10, y_position), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
                     
                     if recording and video_writer is not None:
                         video_writer.write(frame)
@@ -398,6 +420,9 @@ def index():
         'pir_detected': sensor_data['pir_detected'],
         'rain_count': sensor_data['rain_count'],
         'rain_detected': sensor_data['rain_detected'],
+        'accel_x': f"{sensor_data['accel_x']:.2f}",
+        'accel_y': f"{sensor_data['accel_y']:.2f}",
+        'accel_z': f"{sensor_data['accel_z']:.2f}",
         'system_temp': f"{sensor_data['system_temp'] or '--'}°C",
         'cpu_usage': f"{sensor_data['cpu_usage'] or '--'}%",
         'memory_usage': f"{sensor_data['memory_usage'] or '--'}%",

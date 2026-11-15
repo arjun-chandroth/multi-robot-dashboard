@@ -1,4 +1,7 @@
 #include <DHT.h>
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_ADXL345_U.h>
 
 // Motor control pins (adjusted for Mega)
 #define IN1 22
@@ -21,7 +24,7 @@ bool soundDetected = false;
 unsigned long soundLedStartTime = 0;
 bool soundLedActive = false;
 
-// Impact Sensor (using interrupt-capable pin on Mega)
+// Impact Sensor
 #define SHOCK_PIN 3
 #define IMPACT_WINDOW_MS 50
 #define MIN_BOUNCES 1
@@ -42,7 +45,7 @@ bool impactLedActive = false;
 bool buzzerActive = false;
 unsigned long buzzerStartTime = 0;
 
-// SMD RGB LED (Common Cathode) - using PWM-capable pins
+// SMD RGB LED (Common Cathode)
 #define LED_RED_PIN 9
 #define LED_GREEN_PIN 10
 #define LED_BLUE_PIN 11
@@ -72,11 +75,22 @@ unsigned long lastPirTime = 0;
 
 // Rain Drop Sensor
 #define RAIN_PIN A1
-#define RAIN_THRESHOLD 500  // Adjust based on your sensor's sensitivity
+#define RAIN_THRESHOLD 500
 bool rainDetected = false;
 int rainEvents = 0;
 unsigned long lastRainTime = 0;
 #define RAIN_COOLDOWN 2000
+
+// ADXL345 Accelerometer
+Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
+float accelX = 0, accelY = 0, accelZ = 0;
+
+// 2-Color LED Module (Common Cathode)
+#define LED_COLOR1_PIN 30  // e.g., Green for rain
+#define LED_COLOR2_PIN 31  // e.g., Red for touch
+unsigned long colorLedStartTime = 0;
+bool colorLedActive = false;
+#define COLOR_LED_DURATION 2000  // 2 seconds
 
 // Sensor timing
 unsigned long lastSensorReadTime = 0;
@@ -92,6 +106,12 @@ void setupLEDs() {
   digitalWrite(LED_RED_PIN, LOW);
   digitalWrite(LED_GREEN_PIN, LOW);
   digitalWrite(LED_BLUE_PIN, LOW);
+  
+  // Initialize 2-color LED
+  pinMode(LED_COLOR1_PIN, OUTPUT);
+  pinMode(LED_COLOR2_PIN, OUTPUT);
+  digitalWrite(LED_COLOR1_PIN, LOW);
+  digitalWrite(LED_COLOR2_PIN, LOW);
 }
 
 void handleBuzzer() {
@@ -119,6 +139,13 @@ void handleLEDs() {
     digitalWrite(LED_GREEN_PIN, LOW);
     tiltLedActive = false;
   }
+  
+  // Handle 2-color LED
+  if (colorLedActive && (millis() - colorLedStartTime >= COLOR_LED_DURATION)) {
+    digitalWrite(LED_COLOR1_PIN, LOW);
+    digitalWrite(LED_COLOR2_PIN, LOW);
+    colorLedActive = false;
+  }
 }
 
 void triggerBuzzer() {
@@ -143,6 +170,22 @@ void triggerTiltLED() {
   digitalWrite(LED_GREEN_PIN, HIGH);
   tiltLedActive = true;
   tiltLedStartTime = millis();
+}
+
+void triggerColorLED(int color) {
+  // Turn off both colors first
+  digitalWrite(LED_COLOR1_PIN, LOW);
+  digitalWrite(LED_COLOR2_PIN, LOW);
+  
+  // Turn on the selected color
+  if (color == 1) {
+    digitalWrite(LED_COLOR1_PIN, HIGH);  // Color 1 (e.g., Green for rain)
+  } else if (color == 2) {
+    digitalWrite(LED_COLOR2_PIN, HIGH);  // Color 2 (e.g., Red for touch)
+  }
+  
+  colorLedActive = true;
+  colorLedStartTime = millis();
 }
 
 void handleImpact() {
@@ -173,6 +216,14 @@ void handleImpact() {
   }
 }
 
+void readAccelerometer() {
+  sensors_event_t event; 
+  accel.getEvent(&event);
+  accelX = event.acceleration.x;
+  accelY = event.acceleration.y;
+  accelZ = event.acceleration.z;
+}
+
 void checkSoundSensor() {
   int soundValue = analogRead(SOUND_PIN);
   if (soundValue > SOUND_THRESHOLD && millis() - lastSoundTime > SOUND_COOLDOWN) {
@@ -191,6 +242,10 @@ void checkTouchSensor() {
     touchEvents++;
     touchDetected = true;
     lastTouchTime = millis();
+    // Trigger color LED for touch
+    if (!colorLedActive) {
+      triggerColorLED(2);  // Color 2 for touch
+    }
   }
 }
 
@@ -221,6 +276,10 @@ void checkRainSensor() {
     rainEvents++;
     rainDetected = true;
     lastRainTime = millis();
+    // Trigger color LED for rain
+    if (!colorLedActive) {
+      triggerColorLED(1);  // Color 1 for rain
+    }
   }
 }
 
@@ -242,9 +301,12 @@ void resetAllSensors() {
   digitalWrite(LED_RED_PIN, LOW);
   digitalWrite(LED_GREEN_PIN, LOW);
   digitalWrite(LED_BLUE_PIN, LOW);
+  digitalWrite(LED_COLOR1_PIN, LOW);
+  digitalWrite(LED_COLOR2_PIN, LOW);
   soundLedActive = false;
   impactLedActive = false;
   tiltLedActive = false;
+  colorLedActive = false;
 }
 
 bool readDHTData(float &temperature, float &humidity) {
@@ -263,6 +325,8 @@ bool readDHTData(float &temperature, float &humidity) {
 void sendSensorData() {
   float temperature, humidity;
   bool dhtSuccess = readDHTData(temperature, humidity);
+  
+  readAccelerometer(); // Read accelerometer data
   
   Serial.print("SENSORS:");
   Serial.print(dhtSuccess ? String(temperature) : "NaN");
@@ -292,6 +356,12 @@ void sendSensorData() {
   Serial.print(rainEvents);
   Serial.print(",");
   Serial.print(rainDetected ? "1" : "0");
+  Serial.print(",");
+  Serial.print(accelX);
+  Serial.print(",");
+  Serial.print(accelY);
+  Serial.print(",");
+  Serial.print(accelZ);
   Serial.println();
   
   impactDetected = false;
@@ -363,13 +433,21 @@ void setup() {
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
   
-  // Initialize RGB LED
+  // Initialize LEDs
   setupLEDs();
   
-  // Attach interrupt - Mega has more interrupt pins than Uno
+  // Initialize accelerometer
+  if(!accel.begin()) {
+    Serial.println("Could not find ADXL345 accelerometer");
+  } else {
+    accel.setRange(ADXL345_RANGE_16_G);
+    Serial.println("ADXL345 accelerometer initialized");
+  }
+  
+  // Attach interrupt
   attachInterrupt(digitalPinToInterrupt(SHOCK_PIN), handleImpact, FALLING);
   
-  Serial.println("System initialized - Mega Version");
+  Serial.println("System initialized - Mega Version with 2-color LED");
 }
 
 void loop() {
