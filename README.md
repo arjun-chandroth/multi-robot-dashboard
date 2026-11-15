@@ -1,11 +1,10 @@
-# Multi-Robot Rover - try4
+# Multi-Robot Rover - try5
 
-A compact Arduino sketch focuses on differential motor movement, DHT11 readings, and interrupt-based impact counting.
+This snapshot preserves the compact DHT11, impact-counter, and motor-control sketch.
 
 ## Features
-- Controls four motor-driver inputs for forward, reverse, left, right, and stop.
-- Reads DHT11 temperature/humidity and emits a serial sensor frame.
-- Counts shock events with interrupt, debounce, bounce-window, and cooldown logic.
+- Retains four-direction motor control, DHT11 telemetry, and interrupt-driven impact counting.
+- Keeps the same pin assignments and serial protocol as try4.
 
 ## Dependencies and hardware
 Arduino AVR board and the modules listed in the sketch pin map. Install DHT Sensor Library.
@@ -21,7 +20,7 @@ arduino-cli upload -p <PORT> --fqbn arduino:avr:mega firmware/rover
 ```
 
 ## Changes from the previous available try
-Compared with try3, the sensor set is reduced to DHT11 and impact detection, with a different motor pin map.
+The selected try5 sketch is byte-for-byte identical to try4; no firmware behavior change is detectable. This commit preserves the available stage and gives it its own documentation.
 
 ## Notes
-Review the pin map and motor wiring before applying power.
+No additional behavior is inferred beyond the source.
