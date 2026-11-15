@@ -1,11 +1,11 @@
-# Multi-Robot Rover - try6
+# Multi-Robot Rover - try7
 
-The rover adds sound-event sensing to the DHT11 and impact-counter baseline.
+The sound/impact firmware adds a retry path for unreliable DHT11 readings.
 
 ## Features
-- Reads an analog sound sensor and counts threshold events with a cooldown.
-- Combines sound and impact flags/counts with DHT11 telemetry.
-- Retains motor direction controls and serial sensor reset behavior.
+- Retains motor control, impact counting, and sound threshold events.
+- Retries a failed temperature/humidity read once after a short delay.
+- Reports sensor values and event states in a periodic serial frame.
 
 ## Dependencies and hardware
 Arduino AVR board and the modules listed in the sketch pin map. Install DHT Sensor Library.
@@ -21,7 +21,7 @@ arduino-cli upload -p <PORT> --fqbn arduino:avr:mega firmware/rover
 ```
 
 ## Changes from the previous available try
-Adds sound threshold detection and sound fields to the serial telemetry frame. The previous available stage in this history is try5.
+Adds a one-retry DHT read helper and explicit handling for failed sensor values. The previous available stage in this history is try6.
 
 ## Notes
-Tune the sound threshold and cooldown to the sensor and environment.
+This source came from a locally named best-version folder; this history labels it sequentially as try7.
