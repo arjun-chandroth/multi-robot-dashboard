@@ -1,27 +1,26 @@
-# Multi-Robot Rover - try7
+# Multi-Robot Rover - try8
 
-The sound/impact firmware adds a retry path for unreliable DHT11 readings.
+A standalone joystick-to-serial experiment replaces the rover sensor sketch for this stage.
 
 ## Features
-- Retains motor control, impact counting, and sound threshold events.
-- Retries a failed temperature/humidity read once after a short delay.
-- Reports sensor values and event states in a periodic serial frame.
+- Reads X/Y axes and a mode button from an analog joystick module.
+- Maps axes to a signed range, applies a center deadzone, and transmits at about 20 Hz.
+- Sends `JOY:x,y` packets and button-driven `MODE:` updates.
 
 ## Dependencies and hardware
-Arduino AVR board and the modules listed in the sketch pin map. Install DHT Sensor Library.
+Arduino AVR board, two-axis analog joystick module, and a momentary mode button.
 
 ## Setup and run
 Install the board core/libraries, review pin assignments and hardware polarity, then compile/upload the sketch shown below.
 
 ```bash
 arduino-cli core install arduino:avr
-arduino-cli lib install "DHT sensor library"
-arduino-cli compile --fqbn arduino:avr:mega firmware/rover
-arduino-cli upload -p <PORT> --fqbn arduino:avr:mega firmware/rover
+arduino-cli compile --fqbn arduino:avr:mega firmware/joystick
+arduino-cli upload -p <PORT> --fqbn arduino:avr:mega firmware/joystick
 ```
 
 ## Changes from the previous available try
-Adds a one-retry DHT read helper and explicit handling for failed sensor values. The previous available stage in this history is try6.
+Switches from try7 rover sensor firmware to a focused joystick input test.
 
 ## Notes
-This source came from a locally named best-version folder; this history labels it sequentially as try7.
+This is an input protocol experiment, not a complete motor-control firmware.
