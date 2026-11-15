@@ -212,6 +212,9 @@
         .rain-card {
             border-left: 4px solid #3498db;
         }
+        .gas-card {
+            border-left: 4px solid #9b59b6;
+        }
         .system-card {
             border-left: 4px solid #9b59b6;
         }
@@ -247,6 +250,10 @@
         }
         .rain-active {
             color: #3498db;
+            animation: pulse 0.5s infinite alternate;
+        }
+        .gas-active {
+            color: #9b59b6;
             animation: pulse 0.5s infinite alternate;
         }
         @keyframes pulse {
@@ -447,6 +454,13 @@
                             {{ 'RAIN DETECTED!' if sensor_data.rain_detected else 'Dry' }}
                         </div>
                     </div>
+                    <div class="metric-card gas-card">
+                        <div class="metric-label">Gas Detections</div>
+                        <div class="metric-value" id="gas_count">{{ sensor_data.gas_count }}</div>
+                        <div id="gas_status" class="metric-value" style="font-size: 1.0em;">
+                            {{ 'GAS DETECTED!' if sensor_data.gas_detected else 'Normal' }}
+                        </div>
+                    </div>
                     <div class="metric-card system-card">
                         <div class="metric-label">CPU Temp</div>
                         <div class="metric-value" id="system_temp">{{ sensor_data.system_temp }}</div>
@@ -495,7 +509,7 @@
                             D2: DHT11, A0: Sound Sensor, D3: Impact Sensor<br>
                             D4: Touch Sensor, D7: Tilt Sensor (HW-505)<br>
                             D6: PIR Motion Sensor, A1: Rain Drop Sensor<br>
-                            I2C: ADXL345 Accelerometer
+                            A2: MQ2 Gas Sensor, I2C: ADXL345 Accelerometer
                         </small>
                     </div>
                 </div>
@@ -532,6 +546,13 @@
                     <div>
                         <strong>Rain Drop Sensor</strong><br>
                         <small>A1: Signal, 5V: Power, GND: Ground</small>
+                    </div>
+                </div>
+                <div class="connection-item">
+                    <div class="connection-icon">G</div>
+                    <div>
+                        <strong>MQ2 Gas Sensor</strong><br>
+                        <small>A2: Signal, 5V: Power, GND: Ground</small>
                     </div>
                 </div>
                 <div class="connection-item">
@@ -847,6 +868,15 @@
             if (data.rain_detected) {
                 rainStatus.classList.add('rain-active');
                 setTimeout(() => rainStatus.classList.remove('rain-active'), 1000);
+            }
+            
+            // Gas detection
+            document.getElementById('gas_count').textContent = data.gas_count;
+            const gasStatus = document.getElementById('gas_status');
+            gasStatus.textContent = data.gas_detected ? 'GAS DETECTED!' : 'Normal';
+            if (data.gas_detected) {
+                gasStatus.classList.add('gas-active');
+                setTimeout(() => gasStatus.classList.remove('gas-active'), 1000);
             }
             
             // Accelerometer data

@@ -1,11 +1,11 @@
-# Multi-Robot Rover - try14
+# Multi-Robot Rover - try15
 
-The sensor dashboard gains accelerometer measurements and a browser-side visualization.
+This stage extends the sensor telemetry with an MQ-2 gas sensor.
 
 ## Features
-- Adds ADXL345 X/Y/Z readings to rover telemetry.
-- Adds an accelerometer plot alongside the sensor and camera panels.
-- Retains serial motor commands, camera streaming, and host metrics.
+- Adds gas-event counting and threshold status to firmware telemetry.
+- Displays gas readings/status in the dashboard.
+- Retains accelerometer, camera, serial motor commands, and host metrics.
 
 ## Dependencies and hardware
 Python 3 with Flask, Flask-SocketIO, OpenCV, psutil, and pyserial; No NumPy dependency is needed by this stage. Arduino AVR board and the modules identified in the firmware. No pinned Python dependency manifest is provided.
@@ -30,7 +30,7 @@ arduino-cli upload -p <PORT> --fqbn arduino:avr:mega firmware/rover
 ```
 
 ## Changes from the previous available try
-Adds an ADXL345 accelerometer to firmware and exposes its axes in the dashboard. The previous available stage in this history is try13.
+Adds MQ-2 gas detection and its dashboard fields. The previous available stage in this history is try14.
 
 ## Notes
-Accelerometer axis orientation depends on board mounting.
+MQ-2 readings require warm-up and calibration; the threshold is not a certified safety limit.

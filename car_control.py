@@ -50,6 +50,8 @@ sensor_data = {
     'pir_detected': False,
     'rain_count': 0,
     'rain_detected': False,
+    'gas_count': 0,
+    'gas_detected': False,
     'accel_x': 0.0,
     'accel_y': 0.0,
     'accel_z': 0.0,
@@ -119,6 +121,10 @@ def log_sensor_data():
             'rain': {
                 'count': sensor_data['rain_count'],
                 'detected': sensor_data['rain_detected']
+            },
+            'gas': {
+                'count': sensor_data['gas_count'],
+                'detected': sensor_data['gas_detected']
             },
             'accelerometer': {
                 'x': sensor_data['accel_x'],
@@ -243,7 +249,7 @@ def read_sensor_data():
                 line = arduino.readline().decode('utf-8').strip()
                 if line.startswith('SENSORS:'):
                     parts = line[8:].split(',')
-                    if len(parts) == 17:
+                    if len(parts) == 19:
                         sensor_data.update({
                             'temperature': float(parts[0]) if parts[0] != 'NaN' else None,
                             'humidity': float(parts[1]) if parts[1] != 'NaN' else None,
@@ -262,6 +268,8 @@ def read_sensor_data():
                             'accel_x': float(parts[14]),
                             'accel_y': float(parts[15]),
                             'accel_z': float(parts[16]),
+                            'gas_count': int(parts[17]),
+                            'gas_detected': bool(int(parts[18])),
                             'last_update': datetime.now().strftime('%H:%M:%S'),
                             'arduino_connected': True
                         })
@@ -281,6 +289,8 @@ def read_sensor_data():
                             'pir_detected': sensor_data['pir_detected'],
                             'rain_count': sensor_data['rain_count'],
                             'rain_detected': sensor_data['rain_detected'],
+                            'gas_count': sensor_data['gas_count'],
+                            'gas_detected': sensor_data['gas_detected'],
                             'accel_x': f"{sensor_data['accel_x']:.2f}",
                             'accel_y': f"{sensor_data['accel_y']:.2f}",
                             'accel_z': f"{sensor_data['accel_z']:.2f}",
@@ -337,6 +347,9 @@ def generate_frames():
                         y_position += 30
                         cv2.putText(frame, f"Rain: {'YES' if sensor_data['rain_detected'] else 'NO'}", (10, y_position),
                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
+                        y_position += 30
+                        cv2.putText(frame, f"Gas: {'YES' if sensor_data['gas_detected'] else 'NO'}", (10, y_position),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (128, 0, 128), 2)
                         y_position += 30
                         cv2.putText(frame, f"Accel: X={sensor_data['accel_x']:.1f} Y={sensor_data['accel_y']:.1f} Z={sensor_data['accel_z']:.1f}", 
                                    (10, y_position), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
@@ -420,6 +433,8 @@ def index():
         'pir_detected': sensor_data['pir_detected'],
         'rain_count': sensor_data['rain_count'],
         'rain_detected': sensor_data['rain_detected'],
+        'gas_count': sensor_data['gas_count'],
+        'gas_detected': sensor_data['gas_detected'],
         'accel_x': f"{sensor_data['accel_x']:.2f}",
         'accel_y': f"{sensor_data['accel_y']:.2f}",
         'accel_z': f"{sensor_data['accel_z']:.2f}",

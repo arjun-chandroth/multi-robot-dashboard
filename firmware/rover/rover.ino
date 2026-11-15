@@ -81,6 +81,14 @@ int rainEvents = 0;
 unsigned long lastRainTime = 0;
 #define RAIN_COOLDOWN 2000
 
+// MQ2 Gas Sensor
+#define MQ2_PIN A2
+#define MQ2_THRESHOLD 300
+bool gasDetected = false;
+int gasEvents = 0;
+unsigned long lastGasTime = 0;
+#define GAS_COOLDOWN 2000
+
 // ADXL345 Accelerometer
 Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 float accelX = 0, accelY = 0, accelZ = 0;
@@ -283,6 +291,15 @@ void checkRainSensor() {
   }
 }
 
+void checkGasSensor() {
+  int gasValue = analogRead(MQ2_PIN);
+  if (gasValue > MQ2_THRESHOLD && millis() - lastGasTime > GAS_COOLDOWN) {
+    gasEvents++;
+    gasDetected = true;
+    lastGasTime = millis();
+  }
+}
+
 void resetAllSensors() {
   confirmedImpacts = 0;
   soundEvents = 0;
@@ -290,12 +307,14 @@ void resetAllSensors() {
   tiltEvents = 0;
   pirEvents = 0;
   rainEvents = 0;
+  gasEvents = 0;
   impactDetected = false;
   soundDetected = false;
   touchDetected = false;
   tiltDetected = false;
   pirDetected = false;
   rainDetected = false;
+  gasDetected = false;
   
   // Turn off all LEDs
   digitalWrite(LED_RED_PIN, LOW);
@@ -362,6 +381,10 @@ void sendSensorData() {
   Serial.print(accelY);
   Serial.print(",");
   Serial.print(accelZ);
+  Serial.print(",");
+  Serial.print(gasEvents);
+  Serial.print(",");
+  Serial.print(gasDetected ? "1" : "0");
   Serial.println();
   
   impactDetected = false;
@@ -370,6 +393,7 @@ void sendSensorData() {
   tiltDetected = false;
   pirDetected = false;
   rainDetected = false;
+  gasDetected = false;
 }
 
 void forward() {
@@ -428,6 +452,7 @@ void setup() {
   pinMode(TILT_PIN, INPUT_PULLUP);
   pinMode(PIR_PIN, INPUT);
   pinMode(RAIN_PIN, INPUT);
+  pinMode(MQ2_PIN, INPUT);
   
   // Initialize buzzer
   pinMode(BUZZER_PIN, OUTPUT);
@@ -447,7 +472,7 @@ void setup() {
   // Attach interrupt
   attachInterrupt(digitalPinToInterrupt(SHOCK_PIN), handleImpact, FALLING);
   
-  Serial.println("System initialized - Mega Version with 2-color LED");
+  Serial.println("System initialized - Mega Version with MQ2 Gas Sensor");
 }
 
 void loop() {
@@ -481,6 +506,7 @@ void loop() {
   checkTiltSensor();
   checkPirSensor();
   checkRainSensor();
+  checkGasSensor();
   
   // Send sensor data at regular intervals
   if (millis() - lastSensorReadTime > SENSOR_READ_INTERVAL) {
