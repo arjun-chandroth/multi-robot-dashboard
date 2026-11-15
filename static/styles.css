@@ -1192,3 +1192,43 @@ body {
     opacity: 0.7;
     font-style: italic;
 }
+
+
+
+
+/* Essential for clean streaming */
+.message.ai {
+    white-space: pre-wrap;      /* Preserve spaces/line breaks naturally */
+    word-break: break-word;     /* Prevent horizontal overflow */
+}
+
+/* Visual improvements (optional but recommended) */
+#chat-messages {
+    max-height: 400px;          /* Prevent infinite growth */
+    overflow-y: auto;           /* Enable scrolling */
+    padding: 10px;
+}
+
+.message {
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+}
+
+.user {
+    background: #e3f2fd;
+    align-self: flex-end;
+}
+
+.ai {
+    background: #f5f5f5;
+}
+
+.ai-stream {
+    display: inline;            /* Critical for smooth streaming */
+}
+
+#chat-input:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}

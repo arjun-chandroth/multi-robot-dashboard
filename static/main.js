@@ -20,9 +20,8 @@ let marker = null;
 
 
 
-
-
-
+let aiStreamingMsg = null;
+let currentAIMessage = null;
 
 
 
@@ -854,53 +853,84 @@ function initChat() {
     const input = document.getElementById('chat-input');
     const messages = document.getElementById('chat-messages');
 
-    function addMessage(sender, text, isThinking = false, isError = false) {
+    let aiMessageContainer = null;
+    let isFirstMessage = true;
+
+    function addUserMessage(text) {
         const msg = document.createElement('div');
-        msg.className = `message ${isError ? 'error' : sender === 'AI Assistant' ? 'ai' : 'user'}`;
-        if (isThinking) msg.classList.add('thinking');
-        msg.innerHTML = `<strong>${sender}:</strong> ${text}`;
+        msg.className = 'message user';
+        msg.innerHTML = `<strong>You:</strong> ${text}`;
         messages.appendChild(msg);
         messages.scrollTop = messages.scrollHeight;
+    }
+
+    function createAIMessage() {
+        const msg = document.createElement('div');
+        msg.className = 'message ai';
+        msg.innerHTML = `<strong>AI Assistant:</strong> <span class="ai-stream"></span>`;
+        messages.appendChild(msg);
+        messages.scrollTop = messages.scrollHeight;
+        return msg;
     }
 
     function sendMessage() {
         const text = input.value.trim();
         if (!text) return;
 
-        console.log("[CHAT] Sending message:", text);
-        addMessage('You', text);
+        addUserMessage(text);
         input.value = '';
-        addMessage('AI Assistant', 'Thinking...', true);
+        input.disabled = true;
+        sendBtn.disabled = true;
 
-        socket.emit('ai_message', { 
+        // Create new AI message container
+        aiMessageContainer = createAIMessage();
+        const aiStream = aiMessageContainer.querySelector('.ai-stream');
+
+        socket.emit('ai_message', {
             text: text,
             timestamp: new Date().toISOString()
-        }, (ack) => {
-            console.log("[CHAT] Server acknowledgement:", ack);
-            const thinkingMsg = document.querySelector('.thinking');
-            if (thinkingMsg) thinkingMsg.remove();
+        });
+
+        // Handle streaming response
+        socket.on('ai_response', function(data) {
+            if (!aiMessageContainer) return;
+
+            switch(data.action) {
+                case 'start':
+                    aiStream.textContent = '';
+                    break;
+                
+                case 'stream':
+                    if (data.text) {
+                        aiStream.textContent += data.text;
+                        messages.scrollTop = messages.scrollHeight;
+                    }
+                    break;
+                
+                case 'end':
+                    aiMessageContainer = null;
+                    input.disabled = false;
+                    sendBtn.disabled = false;
+                    input.focus();
+                    break;
+                
+                case 'error':
+                    aiStream.textContent += `\n[ERROR: ${data.text}]`;
+                    aiMessageContainer = null;
+                    input.disabled = false;
+                    sendBtn.disabled = false;
+                    input.focus();
+                    break;
+            }
         });
     }
 
-    // Handle AI responses
-    socket.on('ai_response', function(data) {
-        console.log("[CHAT] Received AI response:", data);
-        const thinkingMsg = document.querySelector('.thinking');
-        if (thinkingMsg) thinkingMsg.remove();
-        
-        if (data.error) {
-            addMessage('System', data.text, false, true);
-        } else {
-            addMessage('AI Assistant', data.text);
-        }
-    });
-
-    // Event listeners
     sendBtn.addEventListener('click', sendMessage);
-    input.addEventListener('keypress', (e) => {
+    input.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') sendMessage();
     });
 }
+
 
 function showStatus(message, isSuccess) {
     const statusDiv = document.getElementById('status-message');

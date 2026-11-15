@@ -233,6 +233,7 @@ def handle_ai_message(data):
             'error': True
         })
 
+
 def cleanup():
     print("Initiating cleanup...")
     global running
