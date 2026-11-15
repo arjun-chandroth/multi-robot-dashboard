@@ -1,11 +1,12 @@
-# Multi-Robot Rover - try37
+# Multi-Robot Rover - try38
 
-The modular backend is retained while the dashboard template, styles, and browser behavior are redesigned.
+The next UI/backend revision adds an explicit AI-message path and reorganizes dashboard control events.
 
 ## Features
-- Keeps the try36 backend modules and hardware integration.
-- Updates dashboard page, styling, and JavaScript interactions.
-- Retains camera, sensor gauges, control modes, recording, AI, and ROS 2 features.
+- Retains modular hardware, camera, ROS 2, monitoring, and AI components.
+- Adds an AI-message event handler in the application layer.
+- Reworks frontend control and recording event wiring.
+- Updates dashboard visuals.
 
 ## Dependencies and hardware
 Python 3 with Flask, Flask-SocketIO, OpenCV, NumPy, psutil, pyserial, pyttsx3, and Ultralytics. ROS 2 `rclpy`/`sensor_msgs` are system dependencies. A local YOLO weights file and hardware are needed for those features.
@@ -22,7 +23,7 @@ python app.py
 ```
 
 ## Changes from the previous available try
-Primarily a UI redesign; the Python module set remains the same. The previous available stage in this history is try36.
+Adds AI-message routing and changes how control/recording events are wired between browser and server. The previous available stage in this history is try37.
 
 ## Notes
-No physical-hardware validation is implied by the updated browser interface.
+AI provider/service availability and credentials are environment-specific; never place API keys in source.

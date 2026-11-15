@@ -28,16 +28,22 @@ let marker = null;
 
 
 
-
 // Initialize all components when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize components
     initButtonControls();
     initAccelPlot();
     initMap();
     initChat();
-  
+    
+    // Debug: Log initialization
+    console.log("DOM fully loaded and parsed");
+    
+    // Connection status elements
+    const connectionStatus = document.getElementById('connection-status');
+    const socketStatus = document.getElementById('socket-status');
 
-
+    // Timer implementation
     const timerElement = document.getElementById('refresh-timer');
     if (timerElement) {
         let seconds = 30;
@@ -45,12 +51,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const timerInterval = setInterval(() => {
             seconds--;
-            console.log('Timer tick:', seconds); // Debug log
+            console.log('Timer tick:', seconds);
             timerElement.textContent = seconds;
             
             if (seconds <= 0) {
                 clearInterval(timerInterval);
-                console.log('Reloading page...'); // Debug log
+                console.log('Reloading page...');
                 window.location.reload();
             }
         }, 1000);
@@ -68,11 +74,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error('Could not find timer element!');
     }
 
-
-
-
-
-   
+    // LIDAR canvas setup
     resizeLidarCanvas();
     window.addEventListener('resize', () => {
         resizeLidarCanvas();
@@ -91,6 +93,7 @@ document.addEventListener('DOMContentLoaded', function() {
     updateStatusIndicator('gps-status', false);
     updateStatusIndicator('control-mode', false);
 
+    // Initial status updates
     updateStatusIndicator('battery-status', true);
     updateStatusIndicator('control-mode', true);
 
@@ -104,6 +107,156 @@ document.addEventListener('DOMContentLoaded', function() {
     lidarCtx.fillStyle = 'white';
     lidarCtx.textAlign = 'center';
     lidarCtx.fillText('Waiting for LIDAR data...', lidarCanvas.width/2, lidarCanvas.height/2);
+
+    // Socket.IO connection monitoring
+    socket.on('connect', () => {
+        console.log("Socket.IO connected");
+        if (socketStatus) {
+            socketStatus.className = 'status-dot connected';
+        }
+        showStatus("Connected to server", true);
+        
+        // Enable chat if in AI mode
+        const controlMode = document.getElementById('control-mode');
+        if (controlMode && controlMode.getAttribute('data-tooltip').includes('AI')) {
+            const chatInput = document.getElementById('chat-input');
+            const sendButton = document.getElementById('send-button');
+            if (chatInput) chatInput.disabled = false;
+            if (sendButton) sendButton.disabled = false;
+            if (chatInput) chatInput.placeholder = "Type your message...";
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log("Socket.IO disconnected");
+        if (socketStatus) {
+            socketStatus.className = 'status-dot disconnected';
+        }
+        showStatus("Disconnected from server", false);
+        
+        // Disable chat interface
+        const chatInput = document.getElementById('chat-input');
+        const sendButton = document.getElementById('send-button');
+        if (chatInput) chatInput.disabled = true;
+        if (sendButton) sendButton.disabled = true;
+        if (chatInput) chatInput.placeholder = "Disconnected - refresh page";
+    });
+
+    socket.on('connect_error', (error) => {
+        console.error("Socket.IO connection error:", error);
+        if (socketStatus) {
+            socketStatus.className = 'status-dot disconnected';
+        }
+        showStatus("Connection error: " + error.message, false);
+    });
+
+    // Control mode updates
+    socket.on('control_mode_update', function(data) {
+        console.log("Control mode updated to:", data.mode);
+        const modeElement = document.getElementById('control-mode');
+        if (modeElement) {
+            modeElement.setAttribute('data-tooltip', `Control Mode: ${data.mode}`);
+            
+            // Update status colors
+            if (data.mode === 'JOYSTICK') {
+                modeElement.className = 'status-badge status-joystick';
+            } else if (data.mode === 'AI') {
+                modeElement.className = 'status-badge status-ai';
+            } else if (data.mode === 'OBSTACLE') {
+                modeElement.className = 'status-badge status-lidar';
+            } else {
+                modeElement.className = 'status-badge status-connected';
+            }
+        }
+
+        // Update button states
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+            btn.classList.remove('active-mode');
+        });
+        
+        const activeBtn = document.querySelector(`.mode-btn[onclick*="${data.mode}"]`);
+        if (activeBtn) {
+            activeBtn.classList.add('active-mode');
+        }
+
+        // Handle AI mode specifically
+        const chatInput = document.getElementById('chat-input');
+        const sendButton = document.getElementById('send-button');
+        const messages = document.getElementById('chat-messages');
+        
+        if (data.mode === 'AI') {
+            // Enable chat interface
+            if (chatInput) {
+                chatInput.disabled = false;
+                chatInput.placeholder = "Type your message to the AI...";
+                setTimeout(() => chatInput.focus(), 100);
+            }
+            if (sendButton) sendButton.disabled = false;
+
+            // Add welcome message if chat is empty
+            if (messages && messages.children.length <= 1) {
+                const welcomeMsg = document.createElement('div');
+                welcomeMsg.className = 'ai-message';
+                welcomeMsg.innerHTML = `<strong>AI Assistant:</strong> AI mode activated! How can I assist you with the robot controls?`;
+                messages.appendChild(welcomeMsg);
+                messages.scrollTop = messages.scrollHeight;
+            }
+        } else {
+            // Disable chat interface
+            if (chatInput) {
+                chatInput.disabled = true;
+                chatInput.placeholder = "Enable AI mode to chat";
+            }
+            if (sendButton) sendButton.disabled = true;
+        }
+    });
+
+    // Add CSS for status animations if not already present
+    if (!document.getElementById('status-animations')) {
+        const style = document.createElement('style');
+        style.id = 'status-animations';
+        style.textContent = `
+            @keyframes fadeInOut {
+                0% { opacity: 0; transform: translateY(10px); }
+                10% { opacity: 1; transform: translateY(0); }
+                90% { opacity: 1; transform: translateY(0); }
+                100% { opacity: 0; transform: translateY(-10px); }
+            }
+            .thinking {
+                opacity: 0.7;
+                font-style: italic;
+            }
+            .status-dot {
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                display: inline-block;
+                margin-right: 5px;
+            }
+            .status-dot.connected {
+                background-color: #2ecc71;
+            }
+            .status-dot.disconnected {
+                background-color: #e74c3c;
+            }
+            .chat-input input:disabled {
+                background-color: #f0f0f0;
+                cursor: not-allowed;
+            }
+            #send-button:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    // Debug: Log initial state
+    console.log("Initialization complete. Current state:", {
+        socketConnected: socket.connected,
+        controlMode: document.getElementById('control-mode')?.getAttribute('data-tooltip'),
+        chatEnabled: !document.getElementById('chat-input')?.disabled
+    });
 });
 
 // Status indicator functions
@@ -565,42 +718,89 @@ function resetAllSensors() {
     });
 }
 
+
+
+
+
 function setControlMode(mode) {
     fetch(`/set_control_mode/${mode}`, {
         method: 'POST'
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
     .then(data => {
         showStatus(data.status, true);
+
+        // Update all mode buttons
         document.querySelectorAll('.mode-btn').forEach(btn => {
             btn.classList.remove('active-mode');
         });
-        event.target.classList.add('active-mode');
         
-        // Ensure obstacle mode is off
-        const obstacleBtn = document.getElementById('obstacle-btn');
-        if (obstacleBtn.classList.contains('active-mode')) {
-            obstacleBtn.classList.remove('active-mode');
-        }
-        
+        const clickedBtn = document.querySelector(`.mode-btn[onclick*="${mode}"]`);
+        if (clickedBtn) clickedBtn.classList.add('active-mode');
+
+        // Update control mode display
         const modeElement = document.getElementById('control-mode');
-        modeElement.textContent = `Control Mode: ${mode}`;
-        
-        if (mode === 'JOYSTICK') {
-            modeElement.classList.remove('status-connected');
-            modeElement.classList.add('status-joystick');
-        } else if (mode === 'AI') {
-            modeElement.classList.remove('status-connected', 'status-joystick');
-            modeElement.classList.add('status-ai');
+        if (modeElement) {
+            modeElement.textContent = `Control Mode: ${mode}`;
+            
+            // Reset all status classes first
+            modeElement.classList.remove('status-connected', 'status-joystick', 'status-ai', 'status-lidar');
+            
+            // Add appropriate status class
+            if (mode === 'JOYSTICK') {
+                modeElement.classList.add('status-joystick');
+            } else if (mode === 'AI') {
+                modeElement.classList.add('status-ai');
+            } else if (mode === 'OBSTACLE') {
+                modeElement.classList.add('status-lidar');
+            } else {
+                modeElement.classList.add('status-connected');
+            }
+        }
+
+        // Handle AI mode specifically
+        const chatInput = document.getElementById('chat-input');
+        const sendButton = document.getElementById('send-button');
+        const messages = document.getElementById('chat-messages');
+
+        if (mode === 'AI') {
+            // Enable chat interface
+            if (chatInput) {
+                chatInput.disabled = false;
+                chatInput.placeholder = "Type your message to the AI...";
+                setTimeout(() => chatInput.focus(), 100);
+            }
+            if (sendButton) sendButton.disabled = false;
+
+            // Add welcome message if chat is empty
+            if (messages && messages.children.length <= 1) {
+                const welcomeMsg = document.createElement('div');
+                welcomeMsg.className = 'mt-2 ai-message';
+                welcomeMsg.innerHTML = `<strong>AI Assistant:</strong> AI mode activated! How can I assist you with the robot controls?`;
+                messages.appendChild(welcomeMsg);
+                messages.scrollTop = messages.scrollHeight;
+            }
         } else {
-            modeElement.classList.remove('status-joystick', 'status-ai');
-            modeElement.classList.add('status-connected');
+            // Disable chat interface
+            if (chatInput) {
+                chatInput.disabled = true;
+                chatInput.placeholder = "Enable AI mode to chat";
+            }
+            if (sendButton) sendButton.disabled = true;
         }
     })
     .catch(error => {
-        showStatus('Error changing control mode', false);
+        showStatus('Error changing control mode: ' + error.message, false);
+        console.error('Error:', error);
     });
 }
+
+
 
 
 
@@ -641,37 +841,95 @@ function initButtonControls() {
     stopBtn.addEventListener('click', () => sendCommand('S'));
 }
 
-// Chat functions
+
+
+
+
+
+
+
+// In initChat() function
 function initChat() {
     const sendBtn = document.getElementById('send-button');
     const input = document.getElementById('chat-input');
     const messages = document.getElementById('chat-messages');
-    
+
+    function addMessage(sender, text, isThinking = false, isError = false) {
+        const msg = document.createElement('div');
+        msg.className = `message ${isError ? 'error' : sender === 'AI Assistant' ? 'ai' : 'user'}`;
+        if (isThinking) msg.classList.add('thinking');
+        msg.innerHTML = `<strong>${sender}:</strong> ${text}`;
+        messages.appendChild(msg);
+        messages.scrollTop = messages.scrollHeight;
+    }
+
     function sendMessage() {
         const text = input.value.trim();
         if (!text) return;
-        
-        // Add user message
-        messages.innerHTML += `<div class="mt-2"><strong>You:</strong> ${text}</div>`;
-        
-        // Clear input
+
+        console.log("[CHAT] Sending message:", text);
+        addMessage('You', text);
         input.value = '';
-        
-        // Scroll to bottom
-        messages.scrollTop = messages.scrollHeight;
-        
-        // Simulate AI response
-        setTimeout(() => {
-            messages.innerHTML += `<div class="mt-2"><strong>AI Assistant:</strong> I received your message: "${text}". This is a simulated response as the AI chat functionality is not connected to the backend.</div>`;
-            messages.scrollTop = messages.scrollHeight;
-        }, 1000);
+        addMessage('AI Assistant', 'Thinking...', true);
+
+        socket.emit('ai_message', { 
+            text: text,
+            timestamp: new Date().toISOString()
+        }, (ack) => {
+            console.log("[CHAT] Server acknowledgement:", ack);
+            const thinkingMsg = document.querySelector('.thinking');
+            if (thinkingMsg) thinkingMsg.remove();
+        });
     }
-    
+
+    // Handle AI responses
+    socket.on('ai_response', function(data) {
+        console.log("[CHAT] Received AI response:", data);
+        const thinkingMsg = document.querySelector('.thinking');
+        if (thinkingMsg) thinkingMsg.remove();
+        
+        if (data.error) {
+            addMessage('System', data.text, false, true);
+        } else {
+            addMessage('AI Assistant', data.text);
+        }
+    });
+
+    // Event listeners
     sendBtn.addEventListener('click', sendMessage);
     input.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') sendMessage();
     });
 }
+
+function showStatus(message, isSuccess) {
+    const statusDiv = document.getElementById('status-message');
+    if (!statusDiv) {
+        console.error("Status message div not found");
+        return;
+    }
+    
+    statusDiv.textContent = message;
+    statusDiv.className = isSuccess ? 'status-message status-success' : 'status-message status-error';
+    statusDiv.style.display = 'block';
+    
+    // Add animation
+    statusDiv.style.animation = 'none';
+    void statusDiv.offsetWidth; // Trigger reflow
+    statusDiv.style.animation = 'fadeInOut 3s forwards';
+    
+    // Auto-hide after delay
+    setTimeout(() => {
+        statusDiv.style.display = 'none';
+    }, 3000);
+}
+
+
+
+
+
+
+
 
 // Status message function
 function showStatus(message, isSuccess) {
