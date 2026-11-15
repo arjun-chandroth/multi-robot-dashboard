@@ -48,6 +48,8 @@ sensor_data = {
     'tilt_detected': False,
     'pir_count': 0,
     'pir_detected': False,
+    'radar_count': 0,
+    'radar_detected': False,
     'rain_count': 0,
     'rain_detected': False,
     'gas_count': 0,
@@ -119,6 +121,10 @@ def log_sensor_data():
             'pir': {
                 'count': sensor_data['pir_count'],
                 'detected': sensor_data['pir_detected']
+            },
+            'radar': {
+                'count': sensor_data['radar_count'],
+                'detected': sensor_data['radar_detected']
             },
             'rain': {
                 'count': sensor_data['rain_count'],
@@ -255,7 +261,7 @@ def read_sensor_data():
                 line = arduino.readline().decode('utf-8').strip()
                 if line.startswith('SENSORS:'):
                     parts = line[8:].split(',')
-                    if len(parts) == 21:
+                    if len(parts) == 23:
                         sensor_data.update({
                             'temperature': float(parts[0]) if parts[0] != 'NaN' else None,
                             'humidity': float(parts[1]) if parts[1] != 'NaN' else None,
@@ -278,6 +284,8 @@ def read_sensor_data():
                             'gas_detected': bool(int(parts[18])),
                             'flame_count': int(parts[19]),
                             'flame_detected': bool(int(parts[20])),
+                            'radar_count': int(parts[21]),
+                            'radar_detected': bool(int(parts[22])),
                             'last_update': datetime.now().strftime('%H:%M:%S'),
                             'arduino_connected': True
                         })
@@ -295,6 +303,8 @@ def read_sensor_data():
                             'tilt_detected': sensor_data['tilt_detected'],
                             'pir_count': sensor_data['pir_count'],
                             'pir_detected': sensor_data['pir_detected'],
+                            'radar_count': sensor_data['radar_count'],
+                            'radar_detected': sensor_data['radar_detected'],
                             'rain_count': sensor_data['rain_count'],
                             'rain_detected': sensor_data['rain_detected'],
                             'gas_count': sensor_data['gas_count'],
@@ -354,6 +364,9 @@ def generate_frames():
                         y_position += 30
                         cv2.putText(frame, f"Motion: {'YES' if sensor_data['pir_detected'] else 'NO'}", (10, y_position),
                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                        y_position += 30
+                        cv2.putText(frame, f"Radar: {'YES' if sensor_data['radar_detected'] else 'NO'}", (10, y_position),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (128, 0, 128), 2)
                         y_position += 30
                         cv2.putText(frame, f"Rain: {'YES' if sensor_data['rain_detected'] else 'NO'}", (10, y_position),
                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
@@ -444,6 +457,8 @@ def index():
         'tilt_detected': sensor_data['tilt_detected'],
         'pir_count': sensor_data['pir_count'],
         'pir_detected': sensor_data['pir_detected'],
+        'radar_count': sensor_data['radar_count'],
+        'radar_detected': sensor_data['radar_detected'],
         'rain_count': sensor_data['rain_count'],
         'rain_detected': sensor_data['rain_detected'],
         'gas_count': sensor_data['gas_count'],

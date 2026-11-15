@@ -209,6 +209,9 @@
         .pir-card {
             border-left: 4px solid #16a085;
         }
+        .radar-card {
+            border-left: 4px solid #7b1fa2;
+        }
         .rain-card {
             border-left: 4px solid #3498db;
         }
@@ -249,6 +252,10 @@
         }
         .pir-active {
             color: #16a085;
+            animation: pulse 0.5s infinite alternate;
+        }
+        .radar-active {
+            color: #7b1fa2;
             animation: pulse 0.5s infinite alternate;
         }
         .rain-active {
@@ -454,6 +461,13 @@
                             {{ 'MOTION DETECTED!' if sensor_data.pir_detected else 'No Motion' }}
                         </div>
                     </div>
+                    <div class="metric-card radar-card">
+                        <div class="metric-label">Radar Detections</div>
+                        <div class="metric-value" id="radar_count">{{ sensor_data.radar_count }}</div>
+                        <div id="radar_status" class="metric-value" style="font-size: 1.0em;">
+                            {{ 'RADAR DETECTED!' if sensor_data.radar_detected else 'No Detection' }}
+                        </div>
+                    </div>
                     <div class="metric-card rain-card">
                         <div class="metric-label">Rain Detections</div>
                         <div class="metric-value" id="rain_count">{{ sensor_data.rain_count }}</div>
@@ -522,9 +536,9 @@
                             D5: IN1, D6: IN2, D9: IN3, D10: IN4 (Motor Driver)<br>
                             D2: DHT11, A0: Sound Sensor, D3: Impact Sensor<br>
                             D4: Touch Sensor, D7: Tilt Sensor (HW-505)<br>
-                            D6: PIR Motion Sensor, A1: Rain Drop Sensor<br>
-                            A2: MQ2 Gas Sensor, A3: Flame Sensor<br>
-                            I2C: ADXL345 Accelerometer
+                            D6: PIR Motion Sensor, D7: Radar Sensor<br>
+                            A1: Rain Drop Sensor, A2: MQ2 Gas Sensor<br>
+                            A3: Flame Sensor, I2C: ADXL345 Accelerometer
                         </small>
                     </div>
                 </div>
@@ -554,6 +568,13 @@
                     <div>
                         <strong>PIR Motion Sensor</strong><br>
                         <small>D6: Signal, 5V: Power, GND: Ground</small>
+                    </div>
+                </div>
+                <div class="connection-item">
+                    <div class="connection-icon">D</div>
+                    <div>
+                        <strong>Microwave Radar Sensor</strong><br>
+                        <small>D7: Signal, 5V: Power, GND: Ground</small>
                     </div>
                 </div>
                 <div class="connection-item">
@@ -881,6 +902,15 @@
             if (data.pir_detected) {
                 pirStatus.classList.add('pir-active');
                 setTimeout(() => pirStatus.classList.remove('pir-active'), 1000);
+            }
+            
+            // Radar detection
+            document.getElementById('radar_count').textContent = data.radar_count;
+            const radarStatus = document.getElementById('radar_status');
+            radarStatus.textContent = data.radar_detected ? 'RADAR DETECTED!' : 'No Detection';
+            if (data.radar_detected) {
+                radarStatus.classList.add('radar-active');
+                setTimeout(() => radarStatus.classList.remove('radar-active'), 1000);
             }
             
             // Rain detection

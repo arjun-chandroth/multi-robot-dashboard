@@ -1,11 +1,11 @@
-# Multi-Robot Rover - try16
+# Multi-Robot Rover - try17
 
-The rover sensor set expands with flame detection while retaining the browser dashboard and accelerometer data.
+The latest early dashboard stage adds radar/proximity event reporting to rover telemetry.
 
 ## Features
-- Adds flame sensor state/count telemetry and a dashboard indicator.
-- Retains gas, accelerometer, PIR/rain, touch/tilt, sound, and impact readings.
-- Continues serial motor control, camera streaming, and host monitoring.
+- Adds radar sensor event counting/status to firmware and dashboard.
+- Retains flame/gas, accelerometer, PIR/rain, and earlier event sensors.
+- Provides Flask/Socket.IO controls, camera streaming, serial telemetry, and host metrics.
 
 ## Dependencies and hardware
 Python 3 with Flask, Flask-SocketIO, OpenCV, psutil, and pyserial; No NumPy dependency is needed by this stage. Arduino AVR board and the modules identified in the firmware. No pinned Python dependency manifest is provided.
@@ -30,7 +30,7 @@ arduino-cli upload -p <PORT> --fqbn arduino:avr:mega firmware/rover
 ```
 
 ## Changes from the previous available try
-Adds a flame sensor and its threshold/event fields to firmware and the dashboard. The previous available stage in this history is try15.
+Adds radar/proximity detection and displays the new event fields. The previous available stage in this history is try16.
 
 ## Notes
-A hobby flame sensor is not a fire alarm or life-safety device.
+This is the last available early dashboard stage before the later dual-camera/ROS 2 experiments.

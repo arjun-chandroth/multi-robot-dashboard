@@ -73,6 +73,13 @@ int pirEvents = 0;
 unsigned long lastPirTime = 0;
 #define PIR_COOLDOWN 2000
 
+// Microwave Radar Sensor
+#define RADAR_PIN 7
+bool radarDetected = false;
+int radarEvents = 0;
+unsigned long lastRadarTime = 0;
+#define RADAR_COOLDOWN 2000
+
 // Rain Drop Sensor
 #define RAIN_PIN A1
 #define RAIN_THRESHOLD 500
@@ -286,6 +293,15 @@ void checkPirSensor() {
   }
 }
 
+void checkRadarSensor() {
+  int radarValue = digitalRead(RADAR_PIN);
+  if (radarValue == HIGH && millis() - lastRadarTime > RADAR_COOLDOWN) {
+    radarEvents++;
+    radarDetected = true;
+    lastRadarTime = millis();
+  }
+}
+
 void checkRainSensor() {
   int rainValue = analogRead(RAIN_PIN);
   if (rainValue < RAIN_THRESHOLD && millis() - lastRainTime > RAIN_COOLDOWN) {
@@ -323,6 +339,7 @@ void resetAllSensors() {
   touchEvents = 0;
   tiltEvents = 0;
   pirEvents = 0;
+  radarEvents = 0;
   rainEvents = 0;
   gasEvents = 0;
   flameEvents = 0;
@@ -331,6 +348,7 @@ void resetAllSensors() {
   touchDetected = false;
   tiltDetected = false;
   pirDetected = false;
+  radarDetected = false;
   rainDetected = false;
   gasDetected = false;
   flameDetected = false;
@@ -408,6 +426,10 @@ void sendSensorData() {
   Serial.print(flameEvents);
   Serial.print(",");
   Serial.print(flameDetected ? "1" : "0");
+  Serial.print(",");
+  Serial.print(radarEvents);
+  Serial.print(",");
+  Serial.print(radarDetected ? "1" : "0");
   Serial.println();
   
   impactDetected = false;
@@ -415,6 +437,7 @@ void sendSensorData() {
   touchDetected = false;
   tiltDetected = false;
   pirDetected = false;
+  radarDetected = false;
   rainDetected = false;
   gasDetected = false;
   flameDetected = false;
@@ -475,6 +498,7 @@ void setup() {
   pinMode(TOUCH_PIN, INPUT);
   pinMode(TILT_PIN, INPUT_PULLUP);
   pinMode(PIR_PIN, INPUT);
+  pinMode(RADAR_PIN, INPUT);
   pinMode(RAIN_PIN, INPUT);
   pinMode(MQ2_PIN, INPUT);
   pinMode(FLAME_PIN, INPUT);
@@ -497,7 +521,7 @@ void setup() {
   // Attach interrupt
   attachInterrupt(digitalPinToInterrupt(SHOCK_PIN), handleImpact, FALLING);
   
-  Serial.println("System initialized - Mega Version with MQ2 Gas and Flame Sensors");
+  Serial.println("System initialized - Mega Version with MQ2 Gas, Flame, and Radar Sensors");
 }
 
 void loop() {
@@ -530,6 +554,7 @@ void loop() {
   checkTouchSensor();
   checkTiltSensor();
   checkPirSensor();
+  checkRadarSensor();
   checkRainSensor();
   checkGasSensor();
   checkFlameSensor();
