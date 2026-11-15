@@ -1,12 +1,12 @@
-# Multi-Robot Rover - try40
+# Multi-Robot Rover - try42
 
-The dashboard restores explicit joystick/control and recording handlers and adds an Arduino diagnostic route.
+This iteration strengthens joystick connection/status reporting and control-mode handling while removing duplicate controller copies.
 
 ## Features
-- Adds server handlers for joystick packets and recording start/pause/stop events.
-- Adds an Arduino test endpoint for checking the serial link.
-- Retains modular camera, AI, ROS 2, monitoring, and sensor modules.
-- Updates the dashboard template for revised controls.
+- Adds joystick connection handling and a control-mode query route.
+- Expands hardware-controller connection, camera, sensor, joystick, and status helpers.
+- Updates camera/joystick settings in central configuration.
+- Removes duplicate controller source copies while preserving active modules.
 
 ## Dependencies and hardware
 Python 3 with Flask, Flask-SocketIO, OpenCV, NumPy, psutil, pyserial, pyttsx3, requests, and Ultralytics. ROS 2 `rclpy`/`sensor_msgs` are system dependencies. A local YOLO weights file and hardware are needed for those features.
@@ -23,7 +23,7 @@ python app.py
 ```
 
 ## Changes from the previous available try
-Restores explicit control and recording event handlers and adds an Arduino diagnostic action. The previous available stage in this history is try39.
+Adds joystick connection/status and control-mode APIs and consolidates duplicate hardware/camera modules. The previous available stage in this history is try40.
 
 ## Notes
-Treat test/control endpoints as hardware actions; do not expose the dashboard to untrusted networks.
+Confirm joystick mappings and safe-stop behavior on the target host before operating motors.

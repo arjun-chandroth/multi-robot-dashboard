@@ -42,22 +42,30 @@ ai_controller = AIController(
 
 def set_control_mode_internal(mode):
     global current_control_mode
+    
+    # Handle JOYMODE as an alias for JOYSTICK
+    if mode == 'JOYMODE':
+        mode = 'JOYSTICK'
+        
     if mode in ['JOYSTICK', 'BUTTONS', 'AI', 'OBSTACLE']:
         current_control_mode = mode
         sensor_data['control_mode'] = mode
 
+        # Stop other modes when switching
         if mode != 'AI' and ai_controller.ai_active:
             ai_controller.stop_ai()
 
         if mode != 'OBSTACLE':
             ros_handler.set_obstacle_avoidance_active(False)
+            hardware_controller.send_command('S')  # Stop motors
+            hardware_controller.send_command('O')  # Turn off obstacle mode
+        
+        # Handle joystick mode specifically
+        if mode == 'JOYSTICK':
+            # Ensure motors are stopped when entering joystick mode
             hardware_controller.send_command('S')
-            hardware_controller.send_command('O')
-        else:
-            if ai_controller.ai_active:
-                ai_controller.stop_ai()
-            hardware_controller.send_command('O')
-
+            print("Joystick mode activated - ready for gamepad input")
+        
         if mode == 'AI':
             ai_controller.start_ai_thread()
 
@@ -211,34 +219,56 @@ def handle_control(command):
 def handle_joystick_input(data):
     global current_control_mode
     
+    # Check if we're in joystick mode AND Arduino is connected
     if current_control_mode != 'JOYSTICK' or not hardware_controller.arduino_connected:
+        print(f"Joystick input ignored - Mode: {current_control_mode}, Arduino: {hardware_controller.arduino_connected}")
         return
 
     axes = data.get('axes', [])
     if len(axes) < 4:
         return
 
-    x = round(axes[3], 1)
-    y = round(axes[1], 1)
+    x = round(axes[3], 1)  # Left stick horizontal
+    y = round(axes[1], 1)  # Left stick vertical
 
-    if y == 1.0:
-        command = 'F'
-    elif y == -1.0:
-        command = 'B'
-    elif x == 1.0:
-        command = 'L'
-    elif x == -1.0:
-        command = 'R'
+    # Enhanced joystick mapping with deadzone
+    deadzone = 0.2  # Ignore small movements
+    
+    if abs(y) > deadzone:
+        if y > deadzone:
+            command = 'F'
+            print(f"[Joystick] Forward (y:{y})")
+        elif y < -deadzone:
+            command = 'B'
+            print(f"[Joystick] Backward (y:{y})")
+        else:
+            command = 'S'
+    elif abs(x) > deadzone:
+        if x > deadzone:
+            command = 'R'
+            print(f"[Joystick] Right (x:{x})")
+        elif x < -deadzone:
+            command = 'L'
+            print(f"[Joystick] Left (x:{x})")
+        else:
+            command = 'S'
     else:
-        command = 'S'
+        command = 'S'  # Stop if no significant movement
 
     try:
         hardware_controller.send_command(command)
-        print(f"[Joystick] Sent command: {command}")
+        # Emit joystick status for UI feedback
+        socketio.emit('joystick_status', {
+            'x': x,
+            'y': y,
+            'command': command,
+            'deadzone': deadzone
+        })
     except Exception as e:
         print(f"[Joystick] Error sending command {command}: {e}")
+        socketio.emit('control_error', {'message': f"Joystick error: {str(e)}"})
 
-@socketio.on('joystick')
+@socketio.on('joystick')  # Legacy handler for compatibility
 def handle_joystick(data):
     global current_control_mode
     
@@ -248,22 +278,40 @@ def handle_joystick(data):
     try:
         x, y = map(int, data.split(','))
         
-        if abs(y) > abs(x):
-            if y > 100:
+        # Add deadzone for legacy joystick too
+        deadzone = 50
+        
+        if abs(y) > abs(x) and abs(y) > deadzone:
+            if y > deadzone:
                 hardware_controller.send_command('F')
-            elif y < -100:
+                print(f"[Legacy Joystick] Forward (x:{x}, y:{y})")
+            elif y < -deadzone:
                 hardware_controller.send_command('B')
+                print(f"[Legacy Joystick] Backward (x:{x}, y:{y})")
+            else:
+                hardware_controller.send_command('S')
+        elif abs(x) > deadzone:
+            if x > deadzone:
+                hardware_controller.send_command('R')
+                print(f"[Legacy Joystick] Right (x:{x}, y:{y})")
+            elif x < -deadzone:
+                hardware_controller.send_command('L')
+                print(f"[Legacy Joystick] Left (x:{x}, y:{y})")
             else:
                 hardware_controller.send_command('S')
         else:
-            if x > 100:
-                hardware_controller.send_command('R')
-            elif x < -100:
-                hardware_controller.send_command('L')
-            else:
-                hardware_controller.send_command('S')
+            hardware_controller.send_command('S')  # Stop when in deadzone
+            
+        # Emit status for UI feedback
+        socketio.emit('joystick_status', {
+            'x': x,
+            'y': y,
+            'command': 'S' if abs(x) < deadzone and abs(y) < deadzone else ('F' if y > deadzone else 'B' if y < -deadzone else 'L' if x < -deadzone else 'R'),
+            'deadzone': deadzone
+        })
     except Exception as e:
-        print(f"Error processing joystick data: {e}")
+        print(f"Error processing legacy joystick data: {e}")
+        socketio.emit('control_error', {'message': f"Legacy joystick error: {str(e)}"})
 
 # --- SocketIO Recording Handlers ---
 @socketio.on('start_recording')
@@ -320,23 +368,23 @@ def handle_ai_message(data):
         return
 
     try:
-        response = ai_controller.query_llama(user_input)
-        if response:
-            filtered_response = ai_controller.process_response(response)
-            socketio.emit('ai_response', {
-                'text': filtered_response if filtered_response else "Command executed",
-                'user_input': user_input
-            })
-        else:
-            socketio.emit('ai_response', {
-                'text': "AI failed to respond. Please try again.",
-                'error': True
-            })
+        # Use the AI controller's query method
+        ai_controller.query_llama(user_input)
+        # The response will be emitted from the AI controller
     except Exception as e:
         socketio.emit('ai_response', {
             'text': f"Error processing your request: {str(e)}",
             'error': True
         })
+
+# --- SocketIO Handler for Joystick Connection Status ---
+@socketio.on('joystick_connect')
+def handle_joystick_connect(data):
+    """Handle joystick connection events from frontend"""
+    connected = data.get('connected', False)
+    sensor_data['joystick_connected'] = connected
+    socketio.emit('joystick_connection_update', {'connected': connected})
+    print(f"Joystick connection status: {connected}")
 
 # --- Debug Route for Testing Arduino ---
 @app.route('/test_arduino/<command>')
@@ -345,11 +393,23 @@ def test_arduino(command):
         return jsonify({"status": f"Command {command} sent successfully"})
     return jsonify({"status": "Failed to send command"}), 500
 
+# --- Route to get current control mode ---
+@app.route('/get_control_mode')
+def get_control_mode():
+    return jsonify({
+        'current_mode': current_control_mode,
+        'available_modes': ['JOYSTICK', 'BUTTONS', 'AI', 'OBSTACLE']
+    })
+
 def cleanup():
     print("Initiating cleanup...")
     global running
     running = False
     try:
+        # Stop all motors on cleanup
+        if hardware_controller.arduino_connected:
+            hardware_controller.send_command('S')
+            
         if ros_handler:
             ros_handler.cleanup()
         if system_monitor:
@@ -358,6 +418,8 @@ def cleanup():
             camera_processor.cleanup()
         if hardware_controller:
             hardware_controller.cleanup()
+        if ai_controller.ai_active:
+            ai_controller.stop_ai()
     except Exception as e:
         print(f"Cleanup error: {e}")
     print("Cleanup complete.")
@@ -387,16 +449,21 @@ if __name__ == '__main__':
     print(f"Arduino connected: {hardware_controller.arduino_connected}")
     print(f"Front camera connected: {hardware_controller.camera is not None}")
     print(f"Rear camera connected: {hardware_controller.rear_camera is not None}")
-    print(f"Control mode: {current_control_mode}")
+    print(f"Initial control mode: {current_control_mode}")
 
+    # Start background threads
     threading.Thread(target=system_monitor.update_system_metrics_loop, args=(camera_processor,), daemon=True).start()
     threading.Thread(target=hardware_controller.read_sensor_data_loop, daemon=True).start()
     threading.Thread(target=hardware_controller.check_connections_loop, daemon=True).start()
 
+    # Initialize ROS
     ros_handler.init_ros()
 
     try:
         print("Starting Flask-SocketIO app on 0.0.0.0:5001")
+        print("Available control modes: JOYSTICK, BUTTONS, AI, OBSTACLE")
         socketio.run(app, host='0.0.0.0', port=5001, debug=False)
+    except Exception as e:
+        print(f"Error starting Flask app: {e}")
     finally:
         cleanup()
