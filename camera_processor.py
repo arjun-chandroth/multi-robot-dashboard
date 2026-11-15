@@ -20,6 +20,8 @@ class CameraProcessor:
         self.view_transformer = ViewTransformer(source=SOURCE, target=TARGET)
         self.detected_objects_front = []
         self.detected_objects_rear = []
+
+        
         self.coordinates = defaultdict(lambda: deque(maxlen=30))
         self.running = True
 
