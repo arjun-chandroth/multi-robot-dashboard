@@ -8,32 +8,126 @@ import serial
 import cv2
 import psutil
 import socket
+import math
+
+import subprocess
+import re
 from datetime import datetime
-from flask import Flask, render_template, Response, request, send_from_directory
+from flask import Flask, render_template, Response, request, jsonify, send_from_directory
 from flask_socketio import SocketIO
+from ultralytics import YOLO
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import LaserScan
+import numpy as np
+import random
+from collections import defaultdict, deque
+import subprocess
+from collections import defaultdict, deque
+import argparse
+from collections import defaultdict, deque
+
+import cv2
+import numpy as np
+from ultralytics import YOLO
+import supervision as sv
+import json
+import time
+from collections import defaultdict, deque
+
+# Updated for webcam perspective (modify these coordinates based on your camera view)
+SOURCE = np.array([[320, 240], [960, 240], [1280, 720], [0, 720]])  # Default 640x480 webcam coordinates
+TARGET_WIDTH = 25
+TARGET_HEIGHT = 250
+
+TARGET = np.array([
+    [0, 0],
+    [TARGET_WIDTH - 1, 0],
+    [TARGET_WIDTH - 1, TARGET_HEIGHT - 1],
+    [0, TARGET_HEIGHT - 1]
+])
+
+class ViewTransformer:
+    def __init__(self, source: np.ndarray, target: np.ndarray) -> None:
+        self.m = cv2.getPerspectiveTransform(source.astype(np.float32), target.astype(np.float32))
+
+    def transform_points(self, points: np.ndarray) -> np.ndarray:
+        if points.size == 0:
+            return points
+        return cv2.perspectiveTransform(points.reshape(-1, 1, 2), self.m).reshape(-1, 2)
+
+
+def get_wifi_strength():
+    try:
+        result = subprocess.check_output(["iwconfig"], stderr=subprocess.DEVNULL).decode()
+        match = re.search(r"Signal level=(-?\d+) dBm", result)
+        if match:
+            signal_dbm = int(match.group(1))
+            quality = 2 * (signal_dbm + 100)
+            return max(0, min(100, quality))
+    except Exception as e:
+        print(f"Error getting WiFi strength: {e}")
+    return None
+
+def get_battery_level():
+    try:
+        output = subprocess.check_output(["upower", "-i", "/org/freedesktop/UPower/devices/battery_BAT0"]).decode()
+        match = re.search(r"percentage:\s+(\d+)%", output)
+        if match:
+            return int(match.group(1))
+    except Exception as e:
+        print(f"Error getting battery level: {e}")
+    return None
+
+
+
+
+
+view_transformer = ViewTransformer(source=SOURCE, target=TARGET)
+coordinates = defaultdict(lambda: deque(maxlen=30))
+
+detected_objects = []
 
 app = Flask(__name__)
 socketio = SocketIO(app, async_mode='threading')
 
+# Load YOLO model
+model = YOLO('yolov8n.pt')
+
 # Configuration
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RECORDINGS_DIR = os.path.join(BASE_DIR, 'recordings')
-SENSOR_DATA_DIR = '/opt/rover/sensors'
+SENSOR_DATA_DIR = os.path.join(BASE_DIR, 'sensor_data')
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
 PLACEHOLDER_PATH = os.path.join(STATIC_DIR, 'placeholder.jpg')
+
+# Constants for object detection
+KNOWN_WIDTH = 0.5  # meters
+FOCAL_LENGTH = 700  # pixels
 
 # Global variables
 arduino = None
 camera = None
+rear_camera = None
 camera_lock = threading.Lock()
-recording = False
-video_writer = None
+rear_camera_lock = threading.Lock()
+fpv_recording = False
+rear_recording = False
+fpv_video_writer = None
+rear_video_writer = None
 running = True
 arduino_connected = False
 current_control_mode = 'BUTTONS'
 camera_fps = 30
 camera_resolution = (640, 480)
 camera_quality = 70
+
+# ROS2 variables
+ros_node = None
+lidar_subscriber = None
+obstacle_avoidance_node = None
+ros_thread = None
+obstacle_avoidance_thread = None
 
 sensor_data = {
     'temperature': None,
@@ -59,6 +153,19 @@ sensor_data = {
     'accel_x': 0.0,
     'accel_y': 0.0,
     'accel_z': 0.0,
+
+
+    'arduino_connected': False,
+    'camera_connected': False,
+    'rear_camera_connected': False,
+    'lidar_connected': False,
+    'control_mode': 'BUTTONS',
+    'wifi_strength': 80,
+    'gps_connected': False,
+    'battery_level': 85,
+    'battery_plugged': False,
+
+
     'system_temp': None,
     'cpu_usage': None,
     'memory_usage': None,
@@ -68,13 +175,152 @@ sensor_data = {
     'hostname': socket.gethostname(),
     'ip_address': socket.gethostbyname(socket.gethostname()),
     'arduino_connected': False,
-    'control_mode': 'BUTTONS'
+    'control_mode': 'BUTTONS',
+    'obstacle_avoidance_active': False,
+    'location': {
+        'lat': None,
+        'lon': None,
+        'city': None,
+        'country': "India"
+    }
 }
+
+detected_objects = []
+
+# Predefined Indian cities with approximate lat-lon
+INDIAN_CITIES = [
+    {"city": "Delhi", "lat": 28.6139, "lon": 77.2090},
+    {"city": "Mumbai", "lat": 19.0760, "lon": 72.8777},
+    {"city": "Bangalore", "lat": 12.9716, "lon": 77.5946},
+    {"city": "Chennai", "lat": 13.0827, "lon": 80.2707},
+    {"city": "Hyderabad", "lat": 17.3850, "lon": 78.4867},
+    {"city": "Kolkata", "lat": 22.5726, "lon": 88.3639},
+    {"city": "Pune", "lat": 18.5204, "lon": 73.8567},
+]
+
+
+def start_gps_simulation(sensor_data):
+    # Pick a random city to start
+    city_data = random.choice(INDIAN_CITIES)
+    sensor_data['location'].update({
+        'lat': city_data['lat'],
+        'lon': city_data['lon'],
+        'city': city_data['city'],
+        'country': 'India'
+    })
+
+    def simulate_movement():
+        while True:
+            # Simulate small movement
+            delta_lat = random.uniform(-0.0005, 0.0005)
+            delta_lon = random.uniform(-0.0005, 0.0005)
+
+            sensor_data['location']['lat'] += delta_lat
+            sensor_data['location']['lon'] += delta_lon
+            sensor_data['last_update'] = time.strftime("%Y-%m-%d %H:%M:%S")
+            sensor_data['gps_connected'] = True
+
+            print(f"[GPS UPDATE] {sensor_data['location']}")
+            time.sleep(1)
+
+    # Run simulation in background
+    threading.Thread(target=simulate_movement, daemon=True).start()
+
+# Example usage
+start_gps_simulation(sensor_data)
+
+
+class LidarSubscriber(Node):
+    def __init__(self):
+        super().__init__('lidar_subscriber')
+        self.subscription = self.create_subscription(
+            LaserScan,
+            '/scan',
+            self.listener_callback,
+            10)
+        self.latest_scan = None
+        self.get_logger().info('LidarSubscriber node initialized')
+
+    def listener_callback(self, msg):
+        try:
+            scan_data = {
+                'angle_min': msg.angle_min,
+                'angle_max': msg.angle_max,
+                'angle_increment': msg.angle_increment,
+                'time_increment': msg.time_increment,
+                'scan_time': msg.scan_time,
+                'range_min': msg.range_min,
+                'range_max': msg.range_max,
+                'ranges': [float(x) if not math.isinf(x) else 0.0 for x in msg.ranges],
+                'intensities': [float(x) if not math.isinf(x) else 0.0 for x in msg.intensities],
+                'timestamp': time.time()
+            }
+            self.latest_scan = scan_data
+            socketio.emit('lidar_update', scan_data)
+        except Exception as e:
+            self.get_logger().error(f'Error processing scan: {str(e)}')
+
+class ObstacleAvoidance(Node):
+    def __init__(self):
+        super().__init__('obstacle_avoidance')
+        self.subscription = self.create_subscription(
+            LaserScan,
+            '/scan',
+            self.scan_callback,
+            10)
+        self.arduino = arduino
+        self.get_logger().info("Obstacle Avoidance Node started")
+        self.active = False
+
+    def scan_callback(self, msg):
+        if not self.active or arduino is None or not arduino_connected:
+            return
+            
+        front_distances = msg.ranges[0:30] + msg.ranges[-30:]
+        valid_distances = [d for d in front_distances if not math.isinf(d) and not math.isnan(d)]
+        
+        if not valid_distances:
+            return
+            
+        min_distance = min(valid_distances)
+
+        if min_distance < 0.5:
+            try:
+                arduino.write(b'L')
+                self.get_logger().info(f"Obstacle at {min_distance:.2f}m → Turning Left")
+            except Exception as e:
+                print(f"Error sending command to Arduino: {e}")
+                sensor_data['arduino_connected'] = False
+        else:
+            try:
+                arduino.write(b'F')
+                self.get_logger().info(f"Clear path → Moving Forward")
+            except Exception as e:
+                print(f"Error sending command to Arduino: {e}")
+                sensor_data['arduino_connected'] = False
+
+def init_ros():
+    global ros_node, lidar_subscriber, ros_thread
+    try:
+        rclpy.init()
+        ros_node = rclpy.create_node('web_interface_node')
+        lidar_subscriber = LidarSubscriber()
+        
+        def ros_spin():
+            while running:
+                rclpy.spin_once(lidar_subscriber, timeout_sec=0.1)
+        
+        ros_thread = threading.Thread(target=ros_spin, daemon=True)
+        ros_thread.start()
+        print("ROS2 initialized successfully")
+    except Exception as e:
+        print(f"Error initializing ROS2: {e}")
 
 def get_system_temperature():
     try:
-        temp = os.popen('vcgencmd measure_temp').readline()
-        return float(temp.replace("temp=", "").replace("'C\n", ""))
+        with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
+            temp = float(f.read().strip()) / 1000.0
+            return temp
     except:
         return None
 
@@ -95,10 +341,13 @@ def collect_system_metrics():
         return {}
 
 def log_sensor_data():
+    global detected_objects
+
     timestamp = datetime.now().isoformat()
     log_data = {
         '@timestamp': timestamp,
         'host': sensor_data['hostname'],
+        'location': sensor_data.get('location', {}),
         'sensors': {
             'temperature': sensor_data['temperature'],
             'humidity': sensor_data['humidity'],
@@ -152,7 +401,9 @@ def log_sensor_data():
             'network_io': sensor_data['network_io']
         },
         'arduino_connected': sensor_data['arduino_connected'],
-        'control_mode': sensor_data['control_mode']
+        'control_mode': sensor_data['control_mode'],
+        'obstacle_avoidance_active': sensor_data['obstacle_avoidance_active'],
+        'yolo_detections': detected_objects
     }
     
     filename = datetime.now().strftime("%Y-%m-%d") + ".json"
@@ -178,9 +429,10 @@ def update_system_metrics():
             time.sleep(10)
 
 def init_hardware():
-    global arduino, camera, arduino_connected
-    # Try to connect to Arduino
-    for port in ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyUSB0']:
+    global arduino, camera, rear_camera, arduino_connected
+    
+    # Initialize Arduino
+    for port in ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyUSB0', '/dev/ttyUSB1']:
         try:
             if arduino is not None:
                 arduino.close()
@@ -189,42 +441,56 @@ def init_hardware():
             arduino_connected = True
             sensor_data['arduino_connected'] = True
             print(f"Arduino connected on {port}")
-            socketio.emit('connection_update', {
-                'arduino_connected': True,
-                'camera_connected': camera is not None
-            })
             break
         except Exception as e:
             print(f"Failed to connect to Arduino on {port}: {e}")
             arduino_connected = False
             sensor_data['arduino_connected'] = False
     
-    # Try to connect to camera
+    # Initialize Front Camera
     try:
         if camera is not None:
             camera.release()
-        for i in range(0, 4):
+        for i in [0, 1]:  # Try common front camera indices
             cap = cv2.VideoCapture(i, cv2.CAP_V4L2)
             if cap.isOpened():
-                print(f"Camera found at index {i}")
+                print(f"Front camera found at index {i}")
                 cap.set(cv2.CAP_PROP_FRAME_WIDTH, camera_resolution[0])
                 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_resolution[1])
                 cap.set(cv2.CAP_PROP_FPS, camera_fps)
                 cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
                 camera = cap
-                socketio.emit('connection_update', {
-                    'arduino_connected': arduino_connected,
-                    'camera_connected': True
-                })
                 break
     except Exception as e:
-        print(f"Error initializing camera: {e}")
+        print(f"Error initializing front camera: {e}")
+    
+    # Initialize Rear Camera
+    try:
+        if rear_camera is not None:
+            rear_camera.release()
+        for i in [2,1, 3]:  # Try common rear camera indices
+            cap = cv2.VideoCapture(i, cv2.CAP_V4L2)
+            if cap.isOpened():
+                print(f"Rear camera found at index {i}")
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, camera_resolution[0])
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_resolution[1])
+                cap.set(cv2.CAP_PROP_FPS, camera_fps)
+                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+                rear_camera = cap
+                break
+    except Exception as e:
+        print(f"Error initializing rear camera: {e}")
+    
+    socketio.emit('connection_update', {
+        'arduino_connected': arduino_connected,
+        'camera_connected': camera is not None,
+        'rear_camera_connected': rear_camera is not None
+    })
 
 def check_connections():
     global arduino_connected
     while running:
         try:
-            # Check Arduino connection
             if arduino is not None:
                 try:
                     arduino.write('D'.encode())
@@ -234,13 +500,14 @@ def check_connections():
             else:
                 arduino_connected = False
             
-            # Check camera connection
             camera_connected = camera is not None and camera.isOpened()
+            rear_camera_connected = rear_camera is not None and rear_camera.isOpened()
             
             sensor_data['arduino_connected'] = arduino_connected
             socketio.emit('connection_update', {
                 'arduino_connected': arduino_connected,
-                'camera_connected': camera_connected
+                'camera_connected': camera_connected,
+                'rear_camera_connected': rear_camera_connected
             })
             
             time.sleep(5)
@@ -261,7 +528,7 @@ def read_sensor_data():
                 line = arduino.readline().decode('utf-8').strip()
                 if line.startswith('SENSORS:'):
                     parts = line[8:].split(',')
-                    if len(parts) == 23:
+                    if len(parts) >= 23:
                         sensor_data.update({
                             'temperature': float(parts[0]) if parts[0] != 'NaN' else None,
                             'humidity': float(parts[1]) if parts[1] != 'NaN' else None,
@@ -289,6 +556,9 @@ def read_sensor_data():
                             'last_update': datetime.now().strftime('%H:%M:%S'),
                             'arduino_connected': True
                         })
+                        
+                        if len(parts) >= 24:
+                            sensor_data['obstacle_avoidance_active'] = bool(int(parts[23]))
                         
                         display_data = {
                             'temperature': f"{sensor_data['temperature']:.1f}°C" if sensor_data['temperature'] is not None else "--",
@@ -319,15 +589,23 @@ def read_sensor_data():
                             'memory_usage': f"{sensor_data['memory_usage'] or '--'}%",
                             'last_update': sensor_data['last_update'],
                             'arduino_connected': sensor_data['arduino_connected'],
-                            'control_mode': sensor_data['control_mode']
+                            'control_mode': sensor_data['control_mode'],
+                            'obstacle_avoidance_active': sensor_data.get('obstacle_avoidance_active', False),
+
+                            'battery_level': sensor_data['battery_level'],
+                            'wifi_strength': sensor_data['wifi_strength']
                         }
+
+
+
+                     
                         socketio.emit('sensor_update', display_data)
                         socketio.emit('accel_update', {
                             'x': sensor_data['accel_x'],
                             'y': sensor_data['accel_y'],
                             'z': sensor_data['accel_z']
                         })
-                elif line:  # Print any other messages from Arduino
+                elif line:
                     print(f"Arduino: {line}")
         except Exception as e:
             print(f"Error reading sensor data: {e}")
@@ -335,7 +613,14 @@ def read_sensor_data():
             sensor_data['arduino_connected'] = False
             time.sleep(1)
 
-def generate_frames():
+def estimate_distance(focal_length, real_width, width_in_frame):
+    if width_in_frame == 0:
+        return 0
+    return (real_width * focal_length) / width_in_frame 
+
+def generate_frames(camera_source, recording_flag, video_writer_ref):
+    global detected_objects
+
     try:
         placeholder = cv2.imread(PLACEHOLDER_PATH)
         _, buffer = cv2.imencode('.jpg', placeholder, [cv2.IMWRITE_JPEG_QUALITY, camera_quality])
@@ -343,90 +628,173 @@ def generate_frames():
     except Exception as e:
         print(f"Error loading placeholder image: {e}")
         placeholder_bytes = b''
-    
+
+    prev_time = time.time()
+
     while running:
         frame_bytes = placeholder_bytes
-        
-        if camera is not None:
-            with camera_lock:
-                ret, frame = camera.read()
-                if ret:
-                    if not recording:
-                        y_position = 30
-                        cv2.putText(frame, f"Temp: {sensor_data['temperature'] or '--'}°C", (10, y_position),
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                        y_position += 30
-                        cv2.putText(frame, f"Mode: {current_control_mode}", (10, y_position),
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-                        y_position += 30
-                        cv2.putText(frame, f"Tilt: {'YES' if sensor_data['tilt_detected'] else 'NO'}", (10, y_position),
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-                        y_position += 30
-                        cv2.putText(frame, f"Motion: {'YES' if sensor_data['pir_detected'] else 'NO'}", (10, y_position),
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-                        y_position += 30
-                        cv2.putText(frame, f"Radar: {'YES' if sensor_data['radar_detected'] else 'NO'}", (10, y_position),
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (128, 0, 128), 2)
-                        y_position += 30
-                        cv2.putText(frame, f"Rain: {'YES' if sensor_data['rain_detected'] else 'NO'}", (10, y_position),
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
-                        y_position += 30
-                        cv2.putText(frame, f"Gas: {'YES' if sensor_data['gas_detected'] else 'NO'}", (10, y_position),
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (128, 0, 128), 2)
-                        y_position += 30
-                        cv2.putText(frame, f"Flame: {'YES' if sensor_data['flame_detected'] else 'NO'}", (10, y_position),
-                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 69, 0), 2)
-                        y_position += 30
-                        cv2.putText(frame, f"Accel: X={sensor_data['accel_x']:.1f} Y={sensor_data['accel_y']:.1f} Z={sensor_data['accel_z']:.1f}", 
-                                   (10, y_position), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-                    
-                    if recording and video_writer is not None:
-                        video_writer.write(frame)
-                    
-                    _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, camera_quality])
-                    frame_bytes = buffer.tobytes()
-        
-        yield (b'--frame\r\n'
-              b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
 
-def start_recording():
-    global recording, video_writer
-    if camera is None or recording:
+        if camera_source is not None:
+            with (camera_lock if camera_source == camera else rear_camera_lock):
+                ret, frame = camera_source.read()
+                if not ret:
+                    continue
+
+                current_time = time.time()
+                delta_time = current_time - prev_time
+                prev_time = current_time
+                camera_type = 'front' if camera_source == camera else 'rear'
+
+                results = model(frame, stream=True)
+
+                for result in results:
+                    for box in result.boxes:
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+                        label = result.names[int(box.cls[0])]
+                        conf = float(box.conf[0])
+                        width = x2 - x1
+                        height = y2 - y1
+                        center_x = (x1 + x2) // 2
+                        center_y = (y1 + y2) // 2
+                        bottom_center = np.array([[[(x1 + x2) / 2, y2]]], dtype=np.float32)
+
+                        # Transform bottom-center to top-down view
+                        transformed_point = view_transformer.transform_points(bottom_center).astype(int)[0]
+                        tx, ty = transformed_point
+                        tracker_id = f"{label}{x1}{y1}{x2}{y2}"
+                        coordinates[tracker_id].append((tx, ty))
+
+                        # Speed/distance calculation
+                        if len(coordinates[tracker_id]) < 15:
+                            speed_kmh = 0.0
+                            movement = "Stationary"
+                            direction = None
+                            distance_m = 0.0
+                        else:
+                            track = list(coordinates[tracker_id])
+                            dx = track[-1][0] - track[0][0]
+                            dy = track[-1][1] - track[0][1]
+                            dist_px = (dx*2 + dy2) * 0.5
+                            time_sec = len(track) / 20
+
+                            px_per_sec = dist_px / time_sec
+                            speed_kmh = (px_per_sec / 30) * 1
+                            movement = "Stationary" if px_per_sec <= 30 else ("towards" if dy < 0 else "away")
+                            direction = "right" if dx > 0 else "left"
+                            distance_m = dist_px / 30
+
+                        # Draw visual
+                        info = f"{label} {conf:.2f}, D:{distance_m:.2f}m, S:{speed_kmh:.2f}km/h"
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        cv2.putText(frame, info, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
+
+                        # Append to global detection log
+                        detected_objects.append({
+                            'camera': camera_type,
+                            'label': label,
+                            'confidence': round(conf, 2),
+                            'distance_m': round(distance_m, 2),
+                            'speed_kmh': round(speed_kmh, 1),
+                            'size_m': {
+                                'width_m': round(width / 200, 2),
+                                'height_m': round(height / 200, 2)
+                            },
+                            'movement': movement,
+                            'direction': direction,
+                            'timestamp': current_time
+                        })
+
+                # UI overlay
+                if not recording_flag:
+                    y_pos = 30
+                    cam_label = "FRONT CAM" if camera_type == 'front' else "REAR CAM"
+                    cv2.putText(frame, cam_label, (10, y_pos),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                    y_pos += 30
+                    cv2.putText(frame, f"Objects: {len(detected_objects)}", (10, y_pos),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                    y_pos += 30
+                    cv2.putText(frame, datetime.now().strftime("%H:%M:%S"), (10, y_pos),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+                if recording_flag and video_writer_ref is not None:
+                    video_writer_ref.write(frame)
+
+                _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, camera_quality])
+                frame_bytes = buffer.tobytes()
+
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+
+
+def start_recording(stream_type):
+    global fpv_recording, rear_recording, fpv_video_writer, rear_video_writer
+    
+    if stream_type == 'fpv' and camera is None:
+        return False
+    if stream_type == 'rear' and rear_camera is None:
         return False
     
     try:
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        filename = os.path.join(RECORDINGS_DIR, f"recording_{timestamp}.avi")
+        filename = os.path.join(RECORDINGS_DIR, f"{stream_type}_recording_{timestamp}.avi")
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        video_writer = cv2.VideoWriter(filename, fourcc, camera_fps, camera_resolution)
-        if not video_writer.isOpened():
-            return False
+        
+        if stream_type == 'fpv':
+            fpv_video_writer = cv2.VideoWriter(filename, fourcc, camera_fps, camera_resolution)
+            if not fpv_video_writer.isOpened():
+                return False
+            fpv_recording = True
+        else:
+            rear_video_writer = cv2.VideoWriter(filename, fourcc, camera_fps, camera_resolution)
+            if not rear_video_writer.isOpened():
+                return False
+            rear_recording = True
             
-        recording = True
         return True
     except Exception as e:
-        print(f"Error starting recording: {e}")
+        print(f"Error starting {stream_type} recording: {e}")
         return False
 
-def stop_recording():
-    global recording, video_writer
-    if recording and video_writer is not None:
-        video_writer.release()
-        video_writer = None
-        recording = False
+def stop_recording(stream_type):
+    global fpv_recording, rear_recording, fpv_video_writer, rear_video_writer
+    
+    if stream_type == 'fpv' and fpv_recording and fpv_video_writer is not None:
+        fpv_video_writer.release()
+        fpv_video_writer = None
+        fpv_recording = False
+    elif stream_type == 'rear' and rear_recording and rear_video_writer is not None:
+        rear_video_writer.release()
+        rear_video_writer = None
+        rear_recording = False
 
 def cleanup():
-    global running, arduino, camera, video_writer
+    global running, arduino, camera, rear_camera, fpv_video_writer, rear_video_writer, ros_node, obstacle_avoidance_node
+    
     running = False
     
-    if recording:
-        stop_recording()
+    if fpv_recording:
+        stop_recording('fpv')
+    if rear_recording:
+        stop_recording('rear')
     
     if camera is not None:
         camera.release()
+    if rear_camera is not None:
+        rear_camera.release()
     
     if arduino is not None:
         arduino.close()
+    
+    try:
+        if ros_node is not None:
+            ros_node.destroy_node()
+        if obstacle_avoidance_node is not None:
+            obstacle_avoidance_node.destroy_node()
+        rclpy.shutdown()
+    except:
+        pass
 
 def signal_handler(sig, frame):
     cleanup()
@@ -444,53 +812,47 @@ def index():
                 'date': datetime.fromtimestamp(os.path.getmtime(filepath)).strftime('%Y-%m-%d %H:%M')
             })
     
-    display_data = {
-        'temperature': f"{sensor_data['temperature'] or '--'}°C",
-        'humidity': f"{sensor_data['humidity'] or '--'}%",
-        'impact_count': sensor_data['impact_count'],
-        'impact_detected': sensor_data['impact_detected'],
-        'sound_count': sensor_data['sound_count'],
-        'sound_detected': sensor_data['sound_detected'],
-        'touch_count': sensor_data['touch_count'],
-        'touch_detected': sensor_data['touch_detected'],
-        'tilt_count': sensor_data['tilt_count'],
-        'tilt_detected': sensor_data['tilt_detected'],
-        'pir_count': sensor_data['pir_count'],
-        'pir_detected': sensor_data['pir_detected'],
-        'radar_count': sensor_data['radar_count'],
-        'radar_detected': sensor_data['radar_detected'],
-        'rain_count': sensor_data['rain_count'],
-        'rain_detected': sensor_data['rain_detected'],
-        'gas_count': sensor_data['gas_count'],
-        'gas_detected': sensor_data['gas_detected'],
-        'flame_count': sensor_data['flame_count'],
-        'flame_detected': sensor_data['flame_detected'],
-        'accel_x': f"{sensor_data['accel_x']:.2f}",
-        'accel_y': f"{sensor_data['accel_y']:.2f}",
-        'accel_z': f"{sensor_data['accel_z']:.2f}",
-        'system_temp': f"{sensor_data['system_temp'] or '--'}°C",
-        'cpu_usage': f"{sensor_data['cpu_usage'] or '--'}%",
-        'memory_usage': f"{sensor_data['memory_usage'] or '--'}%",
-        'last_update': sensor_data['last_update'],
-        'arduino_connected': sensor_data['arduino_connected'],
-        'control_mode': sensor_data['control_mode']
-    }
-    
-    return render_template('index.html', recordings=recordings, sensor_data=display_data)
+    return render_template('index.html')
 
 @app.route('/video_feed')
 def video_feed():
-    return Response(generate_frames(),
+    return Response(generate_frames(camera, fpv_recording, fpv_video_writer),
                   mimetype='multipart/x-mixed-replace; boundary=frame')
 
-@app.route('/record', methods=['POST'])
-def toggle_recording():
-    if not recording:
-        success = start_recording()
-        return {"status": "recording started" if success else "failed to start recording"}
-    else:
-        stop_recording()
-        return {"status": "recording stopped"}
+@app.route('/rear_video_feed')
+def rear_video_feed():
+    return Response(generate_frames(rear_camera, rear_recording, rear_video_writer),
+                  mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/location', methods=['POST'])
+def receive_location():
+    data = request.get_json()
+    try:
+        sensor_data['location'] = {
+            'lat': data.get('lat'),
+            'lon': data.get('lon'),
+            'city': data.get('city'),
+            'country': data.get('country')
+        }
+        return jsonify({"status": "Location received", "location": sensor_data['location']})
+    except Exception as e:
+        return jsonify({"status": "Error", "error": str(e)}), 400
+
+@app.route('/start_recording/<stream>', methods=['POST'])
+def start_recording_route(stream):
+    if stream not in ['fpv', 'rear']:
+        return jsonify({"status": "Invalid stream type"}), 400
+    
+    success = start_recording(stream)
+    return jsonify({"status": "recording started" if success else "failed to start recording"})
+
+@app.route('/stop_recording/<stream>', methods=['POST'])
+def stop_recording_route(stream):
+    if stream not in ['fpv', 'rear']:
+        return jsonify({"status": "Invalid stream type"}), 400
+    
+    stop_recording(stream)
+    return jsonify({"status": "recording stopped"})
 
 @app.route('/download/<filename>')
 def download_recording(filename):
@@ -514,25 +876,82 @@ def download_sensor_logs():
         headers={'Content-Disposition': 'attachment;filename=sensor_logs.zip'}
     )
 
-@app.route('/reset_shock_count', methods=['POST'])
-def reset_shock_count():
+@app.route('/reset_sensors', methods=['POST'])
+def reset_sensors():
     if arduino is not None and arduino_connected:
         try:
             arduino.write('X'.encode())
-            return {"status": "All sensors reset"}
+            return jsonify({"status": "All sensors reset"})
         except:
-            return {"status": "Error sending reset command"}, 500
-    return {"status": "Arduino not connected"}, 500
+            return jsonify({"status": "Error sending reset command"}), 500
+    return jsonify({"status": "Arduino not connected"}), 500
 
 @app.route('/set_control_mode/<mode>', methods=['POST'])
 def set_control_mode(mode):
-    global current_control_mode
+    global current_control_mode, obstacle_avoidance_node
     if mode in ['JOYSTICK', 'BUTTONS']:
         current_control_mode = mode
         sensor_data['control_mode'] = mode
+        
+        if obstacle_avoidance_node is not None:
+            obstacle_avoidance_node.active = False
+            sensor_data['obstacle_avoidance_active'] = False
+            if arduino is not None and arduino_connected:
+                try:
+                    arduino.write('O'.encode())
+                except:
+                    pass
+        
         socketio.emit('control_mode_update', {'mode': mode})
-        return {"status": f"Control mode set to {mode}"}
-    return {"status": "Invalid mode"}, 400
+        return jsonify({"status": f"Control mode set to {mode}"})
+    return jsonify({"status": "Invalid mode"}), 400
+
+@app.route('/set_obstacle_mode/<state>', methods=['POST'])
+def set_obstacle_mode(state):
+    global obstacle_avoidance_node, obstacle_avoidance_thread, current_control_mode
+    
+    if state == 'on':
+        if obstacle_avoidance_node is None:
+            try:
+                obstacle_avoidance_node = ObstacleAvoidance()
+                def ros_spin():
+                    rclpy.spin(obstacle_avoidance_node)
+                
+                obstacle_avoidance_thread = threading.Thread(target=ros_spin, daemon=True)
+                obstacle_avoidance_thread.start()
+            except Exception as e:
+                print(f"Error starting obstacle avoidance: {e}")
+                return jsonify({"status": "Error starting obstacle avoidance"}), 500
+        
+        obstacle_avoidance_node.active = True
+        current_control_mode = 'OBSTACLE'
+        sensor_data['control_mode'] = 'OBSTACLE'
+        sensor_data['obstacle_avoidance_active'] = True
+        
+        if arduino is not None and arduino_connected:
+            try:
+                arduino.write('O'.encode())
+            except:
+                pass
+        
+        socketio.emit('control_mode_update', {'mode': 'OBSTACLE'})
+        return jsonify({"status": "Obstacle avoidance mode activated"})
+    else:
+        if obstacle_avoidance_node is not None:
+            obstacle_avoidance_node.active = False
+            sensor_data['obstacle_avoidance_active'] = False
+        
+        if arduino is not None and arduino_connected:
+            try:
+                arduino.write('S'.encode())
+                arduino.write('O'.encode())
+            except:
+                pass
+        
+        current_control_mode = 'BUTTONS'
+        sensor_data['control_mode'] = 'BUTTONS'
+        socketio.emit('control_mode_update', {'mode': 'BUTTONS'})
+        return jsonify({"status": "Obstacle avoidance mode deactivated"})
 
 @socketio.on('control')
 def handle_control(command):
@@ -559,14 +978,14 @@ def handle_joystick(data):
     try:
         x, y = map(int, data.split(','))
         
-        if abs(y) > abs(x):  # Forward/backward dominant
+        if abs(y) > abs(x):
             if y > 100:
                 arduino.write('F'.encode())
             elif y < -100:
                 arduino.write('B'.encode())
             else:
                 arduino.write('S'.encode())
-        else:  # Left/right dominant
+        else:
             if x > 100:
                 arduino.write('R'.encode())
             elif x < -100:
@@ -576,16 +995,52 @@ def handle_joystick(data):
     except Exception as e:
         print(f"Error processing joystick data: {e}")
 
+@socketio.on('start_recording')
+def handle_start_recording(data):
+    stream = data.get('stream')
+    if stream in ['fpv', 'rear']:
+        success = start_recording(stream)
+        socketio.emit('recording_status', {
+            'stream': stream,
+            'recording': success
+        })
+
+@socketio.on('stop_recording')
+def handle_stop_recording(data):
+    stream = data.get('stream')
+    if stream in ['fpv', 'rear']:
+        stop_recording(stream)
+        socketio.emit('recording_status', {
+            'stream': stream,
+            'recording': False
+        })
+
+@socketio.on('pause_recording')
+def handle_pause_recording(data):
+    stream = data.get('stream')
+    if stream == 'fpv':
+        socketio.emit('recording_status', {
+            'stream': stream,
+            'recording': False,
+            'paused': True
+        })
+    elif stream == 'rear':
+        socketio.emit('recording_status', {
+            'stream': stream,
+            'recording': False,
+            'paused': True
+        })
+
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    # Create required directories if they don't exist
     os.makedirs(RECORDINGS_DIR, exist_ok=True)
     os.makedirs(SENSOR_DATA_DIR, exist_ok=True)
     os.makedirs(STATIC_DIR, exist_ok=True)
     
     init_hardware()
+    init_ros()
     threading.Thread(target=update_system_metrics, daemon=True).start()
     threading.Thread(target=read_sensor_data, daemon=True).start()
     threading.Thread(target=check_connections, daemon=True).start()
