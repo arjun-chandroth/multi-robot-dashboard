@@ -232,35 +232,6 @@ INDIAN_CITIES = [
 ]
 
 
-def start_gps_simulation(sensor_data):
-    # Pick a random city to start
-    city_data = random.choice(INDIAN_CITIES)
-    sensor_data['location'].update({
-        'lat': city_data['lat'],
-        'lon': city_data['lon'],
-        'city': city_data['city'],
-        'country': 'India'
-    })
-
-    def simulate_movement():
-        while True:
-            # Simulate small movement
-            delta_lat = random.uniform(-0.0005, 0.0005)
-            delta_lon = random.uniform(-0.0005, 0.0005)
-
-            sensor_data['location']['lat'] += delta_lat
-            sensor_data['location']['lon'] += delta_lon
-            sensor_data['last_update'] = time.strftime("%Y-%m-%d %H:%M:%S")
-            sensor_data['gps_connected'] = True
-
-            #print(f"[GPS UPDATE] {sensor_data['location']}")
-            time.sleep(1)
-
-    # Run simulation in background
-    threading.Thread(target=simulate_movement, daemon=True).start()
-
-# Example usage
-start_gps_simulation(sensor_data)
 
 
 class LidarSubscriber(Node):
@@ -795,20 +766,27 @@ def read_sensor_data():
                             'arduino_connected': sensor_data['arduino_connected'],
                             'control_mode': sensor_data['control_mode'],
                             'obstacle_avoidance_active': sensor_data.get('obstacle_avoidance_active', False),
-
                             'battery_level': sensor_data['battery_level'],
                             'wifi_strength': sensor_data['wifi_strength']
                         }
 
-
-
-                     
                         socketio.emit('sensor_update', display_data)
                         socketio.emit('accel_update', {
                             'x': sensor_data['accel_x'],
                             'y': sensor_data['accel_y'],
                             'z': sensor_data['accel_z']
                         })
+                elif line.startswith('GPS:'):
+                    try:
+                        _, payload = line.split(':', 1)
+                        lat_str, lon_str = payload.split(',', 1)
+                        lat, lon = float(lat_str), float(lon_str)
+                        sensor_data['location'] = {'lat': lat, 'lon': lon}
+                        sensor_data['gps_connected'] = True
+                        socketio.emit('gps_update', {'lat': lat, 'lon': lon})
+                    except Exception as e:
+                        print(f"Error parsing GPS: {e}")
+
                 elif line:
                     print(f"Arduino: {line}")
         except Exception as e:

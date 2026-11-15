@@ -1,11 +1,11 @@
-# Multi-Robot Rover - try31
+# Multi-Robot Rover - try32
 
-This snapshot focuses the repository on the active dashboard application and its UI assets.
+The dashboard removes simulation helpers and keeps the browser gamepad and live telemetry workflow.
 
 ## Features
-- Keeps the main dashboard, templates, and static assets.
-- Retains gamepad controls, cameras, recording, telemetry, voice, and ROS 2 code in the active app.
-- Removes redundant legacy controller scripts and the Arduino sketch from this snapshot.
+- Retains dashboard, gamepad controls, camera streams/recording, and sensor monitoring.
+- Retains ROS 2/LiDAR hooks and location-receive endpoint.
+- Removes GPS and movement simulation helpers from the Python app.
 
 ## Dependencies and hardware
 Python 3 with Flask, Flask-SocketIO, OpenCV, NumPy, psutil, pyserial, pyttsx3, Ultralytics, and Supervision. ROS 2 `rclpy`/`sensor_msgs` must be installed from a compatible ROS distribution. Provide YOLO weights locally; they are not stored here.
@@ -23,7 +23,7 @@ python car_latest.py
 ```
 
 ## Changes from the previous available try
-Removes alternate controller scripts, temporary template variants, and the separate Arduino sketch; the active dashboard code is otherwise unchanged. The previous available stage in this history is try30.
+Drops local movement/GPS simulation helpers; location updates are still accepted from an external client. The previous available stage in this history is try31.
 
 ## Notes
-This source stage has no firmware file; pair it with the matching controller firmware from the hardware setup.
+This snapshot has no Arduino sketch; pair it with the matching controller firmware. Live hardware/network setup is required for the removed simulation data paths.
