@@ -1,28 +1,12 @@
-# Python environments and generated files
 .venv/
-venv/
-env/
+build/
+install/
+log/
 __pycache__/
 *.py[cod]
-
-# Local configuration and credentials
 .env
 .env.*
-!.env.example
-
-# Runtime data and generated assets
-sensor_data/
-recordings/
-*.log
-nohup.out
-
-# Large model and recording files
-*.pt
-*.onnx
-*.avi
-*.mp4
-
-# Editor and temporary files
-.vscode/
-*.swp
-.DS_Store
+data/recordings/*
+data/sensor_data/*
+!data/recordings/.gitkeep
+!data/sensor_data/.gitkeep

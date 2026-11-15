@@ -5,7 +5,7 @@ let rearRecording = false;
 let buttonActive = false;
 let accelData = [];
 const maxDataPoints = 50;
-let plot = null;
+let accelPlotResizeObserver = null;
 let lidarCanvas = document.getElementById('lidar-canvas');
 let lidarCtx = lidarCanvas.getContext('2d');
 let lastLidarUpdate = 0;
@@ -160,11 +160,9 @@ document.addEventListener('DOMContentLoaded', function() {
     resizeLidarCanvas();
     window.addEventListener('resize', () => {
         resizeLidarCanvas();
-        if (plot) {
-            Plotly.relayout('accel-plot', {
-                'width': document.getElementById('accel-plot').offsetWidth,
-                'height': document.getElementById('accel-plot').offsetHeight
-            });
+        const accelPlot = document.getElementById('accel-plot');
+        if (accelPlot && accelPlot.data) {
+            Plotly.Plots.resize(accelPlot);
         }
     });
     
@@ -474,7 +472,7 @@ function syncControlModeUI(mode) {
 
 function clearSensorReadings() {
     const sensorValueIds = [
-        'temperature', 'humidity', 'touch_count', 'tilt_count', 'system_temp', 'cpu_usage',
+        'temperature', 'humidity', 'touch_count', 'tilt_count',
         'rain_count', 'gas_count', 'flame_count', 'impact_count', 'sound_count', 'pir_count',
         'radar_count', 'accel_x', 'accel_y', 'accel_z'
     ];
@@ -490,7 +488,13 @@ function clearSensorReadings() {
     sensorValueIds.forEach((id) => {
         const element = document.getElementById(id);
         if (element) {
-            element.textContent = id.startsWith('accel_') ? '0.00' : '0';
+            if (id.startsWith('accel_')) {
+                element.textContent = '0.00';
+            } else if (id === 'temperature' || id === 'humidity') {
+                element.textContent = '--';
+            } else {
+                element.textContent = '0';
+            }
         }
     });
 
@@ -623,7 +627,7 @@ function toggleFullscreen(element) {
 
 // LIDAR functions
 function resizeLidarCanvas() {
-    const container = document.getElementById('lidar-container');
+    const container = lidarCanvas.parentElement;
     lidarCanvas.width = container.clientWidth;
     lidarCanvas.height = container.clientHeight;
 }
@@ -729,7 +733,18 @@ function initAccelPlot() {
         margin: { l: 0, r: 0, b: 0, t: 30 }
     };
     
-    plot = Plotly.newPlot(container, data, layout);
+    Plotly.newPlot(container, data, layout, { responsive: true });
+
+    if (accelPlotResizeObserver) {
+        accelPlotResizeObserver.disconnect();
+    }
+
+    accelPlotResizeObserver = new ResizeObserver(() => {
+        if (container.data && container.clientWidth > 0 && container.clientHeight > 0) {
+            Plotly.Plots.resize(container);
+        }
+    });
+    accelPlotResizeObserver.observe(container);
 }
 
 function updateAccelPlot(x, y, z) {
@@ -1061,12 +1076,10 @@ function showStatus(message, isSuccess) {
 // Socket event listeners
 socket.on('sensor_update', function(data) {
     if (data.arduino_connected === false) {
-        resetSensorConnectionState();
         clearSensorReadings();
-        return;
+    } else {
+        updateSensorConnectionFromPayload(data);
     }
-
-    updateSensorConnectionFromPayload(data);
 
     const connectedSensors = {
         touch: isSensorConnected('touch'),
@@ -1098,9 +1111,10 @@ socket.on('sensor_update', function(data) {
     }
 
     // Update text values
+    const arduinoConnected = data.arduino_connected !== false;
     const textUpdates = {
-        'temperature': data.temperature || "--",
-        'humidity': data.humidity || "--",
+        'temperature': arduinoConnected ? (data.temperature || "--") : "--",
+        'humidity': arduinoConnected ? (data.humidity || "--") : "--",
         'touch_count': connectedSensors.touch ? (data.touch_count || "0") : "0",
         'tilt_count': connectedSensors.tilt ? (data.tilt_count || "0") : "0",
         'system_temp': data.system_temp || "--",
@@ -1112,9 +1126,9 @@ socket.on('sensor_update', function(data) {
         'sound_count': connectedSensors.sound ? (data.sound_count || "0") : "0",
         'pir_count': connectedSensors.pir ? (data.pir_count || "0") : "0",
         'radar_count': connectedSensors.radar ? (data.radar_count || "0") : "0",
-        'accel_x': data.accel_x || "0.00",
-        'accel_y': data.accel_y || "0.00",
-        'accel_z': data.accel_z || "0.00"
+        'accel_x': arduinoConnected ? (data.accel_x || "0.00") : "0.00",
+        'accel_y': arduinoConnected ? (data.accel_y || "0.00") : "0.00",
+        'accel_z': arduinoConnected ? (data.accel_z || "0.00") : "0.00"
     };
 
     for (const [id, value] of Object.entries(textUpdates)) {

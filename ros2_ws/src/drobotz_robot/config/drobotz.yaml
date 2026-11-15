@@ -1,0 +1,40 @@
+/drobotz_hardware:
+  ros__parameters:
+    serial_ports: ["/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyUSB0", "/dev/ttyUSB1"]
+    baudrate: 115200
+    command_timeout_sec: 1.0
+    reconnect_interval_sec: 2.0
+    sensor_timeout_sec: 5.0
+
+/drobotz_camera:
+  ros__parameters:
+    front_camera_indices: [0, 1, 2]
+    rear_camera_indices: [2, 1, 3, 4]
+    width: 1280
+    height: 720
+    fps: 20.0
+    jpeg_quality: 75
+    frame_timeout_sec: 4.0
+    enable_object_detection: true
+
+/drobotz_system_monitor:
+  ros__parameters:
+    update_interval_sec: 5.0
+
+/drobotz_obstacle_avoidance:
+  ros__parameters:
+    scan_topic: "/scan"
+    obstacle_distance_m: 0.5
+    front_angle_degrees: 60.0
+
+/drobotz_ai_controller:
+  ros__parameters:
+    max_tokens: 300
+    temperature: 0.4
+    timeout_sec: 25.0
+    enable_tts: true
+
+/drobotz_web_dashboard:
+  ros__parameters:
+    host: "0.0.0.0"
+    port: 5001
