@@ -1,12 +1,11 @@
-# Multi-Robot Rover - try27
+# Multi-Robot Rover - try28
 
-This iteration pairs the dashboard with an Arduino firmware snapshot and updates the browser interface.
+The dashboard backend remains stable while browser-side control and initialization code receives another revision.
 
 ## Features
-- Includes an Arduino motor/sensor sketch to accompany serial dashboard control.
-- Retains cameras, recording, YOLO processing, telemetry, voice features, and ROS 2/LiDAR.
-- Updates dashboard JavaScript and template content.
-- Preserves alternate controller scripts as reference source files.
+- Retains camera, recording, detection, telemetry, voice, joystick, and ROS 2 features.
+- Updates the main JavaScript dashboard interaction code.
+- Keeps the Arduino firmware and active Python entry point from try27.
 
 ## Dependencies and hardware
 Python 3 with Flask, Flask-SocketIO, OpenCV, NumPy, psutil, pyserial, pyttsx3, Ultralytics, and Supervision. ROS 2 `rclpy`/`sensor_msgs` must be installed from a compatible ROS distribution. Provide YOLO weights locally; they are not stored here.
@@ -25,7 +24,7 @@ python car_latest.py
 ```
 
 ## Changes from the previous available try
-Adds the rover Arduino sketch and adjusts dashboard-side controls/layout. The previous available stage in this history is try26.
+Primarily a front-end revision; the main Python feature set is unchanged. The previous available stage in this history is try27.
 
 ## Notes
-Confirm motor wiring and stop behavior before testing controls.
+Only the primary frontend revision is used; generated recordings and logs are not tracked.

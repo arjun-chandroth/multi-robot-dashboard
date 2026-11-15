@@ -800,12 +800,36 @@ socket.on('lidar_update', function(data) {
     document.getElementById('lidar-status').textContent = 'LIDAR: Connected';
 });
 
+
+
+
+
 socket.on('gps_update', function(data) {
-    if (data.lat && data.lon && map && marker) {
-        marker.setLatLng([data.lat, data.lon]);
-        map.panTo([data.lat, data.lon]);
+    const { lat, lon } = data;
+    if (lat && lon && typeof lat === 'number' && typeof lon === 'number') {
+        const newLatLng = L.latLng(lat, lon);
+        if (marker && marker.setLatLng) {
+            marker.setLatLng(newLatLng);
+            map.panTo(newLatLng);
+        }
+
+        // Optional: Show coordinates
+        const gpsLabel = document.getElementById("gps-label");
+        if (gpsLabel) {
+            gpsLabel.textContent = `GPS: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+        }
     }
 });
+
+
+
+
+
+
+
+
+
+
 
 socket.on('recording_status', function(data) {
     if (data.stream === 'fpv') {
