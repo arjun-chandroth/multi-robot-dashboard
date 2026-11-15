@@ -13,9 +13,9 @@ DHT dht(DHTPIN, DHTTYPE);
 
 // Sound Sensor
 #define SOUND_PIN A0
-#define SOUND_THRESHOLD 100  // Adjust based on testing
+#define SOUND_THRESHOLD 100
 unsigned long lastSoundTime = 0;
-#define SOUND_COOLDOWN 1000  // 1 second cooldown
+#define SOUND_COOLDOWN 1000
 int soundEvents = 0;
 bool soundDetected = false;
 
@@ -37,7 +37,14 @@ unsigned long lastImpactTime = 0;
 bool touchDetected = false;
 int touchEvents = 0;
 unsigned long lastTouchTime = 0;
-#define TOUCH_COOLDOWN 500  // 0.5 second cooldown
+#define TOUCH_COOLDOWN 500
+
+// Tilt Sensor (HW-505)
+#define TILT_PIN 7
+bool tiltDetected = false;
+int tiltEvents = 0;
+unsigned long lastTiltTime = 0;
+#define TILT_COOLDOWN 1000
 
 // Sensor timing
 unsigned long lastSensorReadTime = 0;
@@ -86,20 +93,30 @@ void checkTouchSensor() {
   }
 }
 
+void checkTiltSensor() {
+  int tiltValue = digitalRead(TILT_PIN);
+  if (tiltValue == LOW && millis() - lastTiltTime > TILT_COOLDOWN) {
+    tiltEvents++;
+    tiltDetected = true;
+    lastTiltTime = millis();
+  }
+}
+
 void resetAllSensors() {
   confirmedImpacts = 0;
   soundEvents = 0;
   touchEvents = 0;
+  tiltEvents = 0;
   impactDetected = false;
   soundDetected = false;
   touchDetected = false;
+  tiltDetected = false;
 }
 
 bool readDHTData(float &temperature, float &humidity) {
   temperature = dht.readTemperature();
   humidity = dht.readHumidity();
   
-  // Retry once if readings failed
   if (isnan(temperature) || isnan(humidity)) {
     delay(100);
     temperature = dht.readTemperature();
@@ -129,42 +146,51 @@ void sendSensorData() {
   Serial.print(touchEvents);
   Serial.print(",");
   Serial.print(touchDetected ? "1" : "0");
+  Serial.print(",");
+  Serial.print(tiltEvents);
+  Serial.print(",");
+  Serial.print(tiltDetected ? "1" : "0");
   Serial.println();
   
   impactDetected = false;
   soundDetected = false;
   touchDetected = false;
+  tiltDetected = false;
 }
 
-// Motor control functions
 void forward() {
   digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
   digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
   currentMotorState = 'F';
+  Serial.println("Moving Forward");
 }
 
 void backward() {
   digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);
   digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);
   currentMotorState = 'B';
+  Serial.println("Moving Backward");
 }
 
 void left() {
   digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);
   digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
   currentMotorState = 'L';
+  Serial.println("Turning Left");
 }
 
 void right() {
   digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
   digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);
   currentMotorState = 'R';
+  Serial.println("Turning Right");
 }
 
 void stopMotors() {
   digitalWrite(IN1, LOW); digitalWrite(IN2, LOW);
   digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);
   currentMotorState = 'S';
+  Serial.println("Stopped");
 }
 
 void setup() {
@@ -185,6 +211,7 @@ void setup() {
   pinMode(SOUND_PIN, INPUT);
   pinMode(SHOCK_PIN, INPUT_PULLUP);
   pinMode(TOUCH_PIN, INPUT);
+  pinMode(TILT_PIN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(SHOCK_PIN), handleImpact, FALLING);
   
   Serial.println("System initialized");
@@ -202,13 +229,17 @@ void loop() {
       case 'S': stopMotors(); break;
       case 'X': resetAllSensors(); break;
       case 'D': sendSensorData(); break;
-      default: break;
+      default: 
+        Serial.print("Unknown command: ");
+        Serial.println(command);
+        break;
     }
   }
 
   // Check sensors
   checkSoundSensor();
   checkTouchSensor();
+  checkTiltSensor();
   
   // Send sensor data at regular intervals
   if (millis() - lastSensorReadTime > SENSOR_READ_INTERVAL) {

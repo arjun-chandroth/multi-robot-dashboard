@@ -1,11 +1,11 @@
-# Multi-Robot Rover - try10
+# Multi-Robot Rover - try11
 
-The rover firmware resumes with DHT11, sound, and impact sensing and adds touch-event detection.
+Tilt detection is added, with separate buzzer and RGB-LED experiments retained alongside the main sketch.
 
 ## Features
-- Controls the motor driver and periodically reports sensor state.
-- Counts impact, sound, and touch events with per-sensor cooldowns.
-- Provides reset-all-sensors behavior and retries unsuccessful DHT11 readings.
+- Main firmware tracks DHT11, impact, sound, touch, and tilt events.
+- Includes standalone buzzer and RGB LED sketches under `firmware/examples/`.
+- Retains motor control and sensor reset commands.
 
 ## Dependencies and hardware
 Arduino AVR board and the modules listed in the sketch pin map. Install DHT Sensor Library.
@@ -21,7 +21,7 @@ arduino-cli upload -p <PORT> --fqbn arduino:avr:mega firmware/rover
 ```
 
 ## Changes from the previous available try
-Returns to rover motor/sensor firmware and adds a touch sensor to the earlier combination. The previous available stage in this history is try8.
+Adds tilt sensing and two independent sketches for buzzer and RGB indicator outputs. The previous available stage in this history is try10.
 
 ## Notes
-The try8 joystick sketch is not included in this stage snapshot.
+Example sketches are independent Arduino programs and should be built separately.
