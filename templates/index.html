@@ -21,6 +21,29 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <script src="{{ url_for('static', filename='main.js') }}" defer></script>
+    <!-- Slider Switch CSS (place in your <style> block) -->
+<style>
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px; height: 24px;
+  margin-left: 8px; vertical-align: middle;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute; cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #ccc; transition: .4s; border-radius: 24px;
+}
+.slider:before {
+  position: absolute; content: "";
+  height: 18px; width: 18px; left: 3px; bottom: 3px;
+  background-color: white; transition: .4s;
+  border-radius: 50%;
+}
+input:checked + .slider { background-color: #2196F3; }
+input:checked + .slider:before { transform: translateX(20px); }
+</style> 
 </head>
 <body>
     <div class="header">
@@ -96,6 +119,7 @@
 
     <div class="main-container">
         <!-- Row 1 -->
+        <!-- Row 1 -->
         <div class="grid-row">
             <!-- FPV -->
             <div class="grid-item">
@@ -103,17 +127,27 @@
                     <i class='bx bx-fullscreen'></i>
                 </div>
                 <div class="panel-heading">
-                    <i class='bx bx-camera'></i>
-                    <span>FPV</span>
-                    <div class="panel-heading-actions">
-                        <div class="record-btn" id="fpv-record-btn" onclick="toggleFpvRecording()">
-                            <i class='bx bxs-video-recording'></i>
-                            <span>Start Recording</span>
-                        </div>
+                <i class='bx bx-camera'></i>
+                <span>FPV</span>
+                <!-- The toggle goes here as a <span> so it's inline, not block -->
+                <span class="stream-toggle" style="margin-left:14px; display:inline-flex; align-items:center;">
+                    <span id="fpv-mode-label" style="font-size:0.93em; margin-right:5px;">Processed</span>
+                    <label class="switch" style="margin-bottom:0;">
+                        <input type="checkbox" id="fpv-toggle">
+                        <span class="slider round"></span>
+                    </label>
+                </span>
+                <div class="panel-heading-actions">
+                    <div class="record-btn" id="fpv-record-btn" onclick="toggleFpvRecording()">
+                        <i class='bx bxs-video-recording'></i>
+                        <span>Start Recording</span>
                     </div>
                 </div>
+            </div>
+
+
                 <div class="video-feed">
-                    <img id="video" src="/video_feed">
+                    <img id="video" src="/video_feed_processed">
                     <div class="video-overlay">
                         <div>FPS: --</div>
                         <div>RES: 640x480</div>
@@ -128,17 +162,27 @@
                     <i class='bx bx-fullscreen'></i>
                 </div>
                 <div class="panel-heading">
-                    <i class='bx bx-camera-movie'></i>
-                    <span>Rear View</span>
-                    <div class="panel-heading-actions">
-                        <div class="record-btn" id="rear-record-btn" onclick="toggleRearRecording()">
-                            <i class='bx bxs-video-recording'></i>
-                            <span>Start Recording</span>
-                        </div>
+                <i class='bx bx-camera-movie'></i>
+                <span>Rear View</span>
+                <!-- Toggle stream control as inline span -->
+                <span class="stream-toggle" style="margin-left:14px; display:inline-flex; align-items:center;">
+                    <span id="rear-mode-label" style="font-size: 0.93em; margin-right:5px;">Processed</span>
+                    <label class="switch" style="margin-bottom:0;">
+                        <input type="checkbox" id="rear-toggle">
+                        <span class="slider round"></span>
+                    </label>
+                </span>
+                <div class="panel-heading-actions">
+                    <div class="record-btn" id="rear-record-btn" onclick="toggleRearRecording()">
+                        <i class='bx bxs-video-recording'></i>
+                        <span>Start Recording</span>
                     </div>
                 </div>
+            </div>
+
+
                 <div class="video-feed">
-                    <img id="rear-video" src="/rear_video_feed">
+                    <img id="rear-video" src="/rear_video_feed_processed">
                     <div class="video-overlay">
                         <div>FPS: --</div>
                         <div>RES: 640x480</div>
@@ -146,6 +190,12 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+
+
+
+
             
             <!-- GPS Tracking -->
             <div class="grid-item">
@@ -463,5 +513,37 @@
     <div id="status-message" class="status-message"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/leaflet.min.js"></script>
+    <!-- Slider Toggle JavaScript (place at the end of your HTML body) -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // FPV stream toggle
+    const fpvToggle = document.getElementById('fpv-toggle');
+    const fpvImg = document.getElementById('video');
+    const fpvModeLabel = document.getElementById('fpv-mode-label');
+    fpvToggle.addEventListener('change', function () {
+        if (fpvToggle.checked) {
+            fpvImg.src = "/video_feed_raw";
+            fpvModeLabel.textContent = "Raw";
+        } else {
+            fpvImg.src = "/video_feed_processed";
+            fpvModeLabel.textContent = "Processed";
+        }
+    });
+
+    // Rear stream toggle
+    const rearToggle = document.getElementById('rear-toggle');
+    const rearImg = document.getElementById('rear-video');
+    const rearModeLabel = document.getElementById('rear-mode-label');
+    rearToggle.addEventListener('change', function () {
+        if (rearToggle.checked) {
+            rearImg.src = "/rear_video_feed_raw";
+            rearModeLabel.textContent = "Raw";
+        } else {
+            rearImg.src = "/rear_video_feed_processed";
+            rearModeLabel.textContent = "Processed";
+        }
+    });
+});
+</script>
 </body>
 </html>

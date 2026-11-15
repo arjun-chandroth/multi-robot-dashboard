@@ -1,29 +1,29 @@
-# Multi-Robot Rover - try32
+# Multi-Robot Rover - try36
 
-The dashboard removes simulation helpers and keeps the browser gamepad and live telemetry workflow.
+The monolithic dashboard is split into modules for routing, hardware, cameras, AI, ROS 2, monitoring, configuration, and utilities.
 
 ## Features
-- Retains dashboard, gamepad controls, camera streams/recording, and sensor monitoring.
-- Retains ROS 2/LiDAR hooks and location-receive endpoint.
-- Removes GPS and movement simulation helpers from the Python app.
+- Introduces focused hardware, camera, AI, ROS 2, system-monitor, and utility modules.
+- Keeps Flask/Socket.IO routes and shared sensor data in the main app.
+- Adds centralized rover configuration and an installer script.
+- Retains camera, serial/gamepad controls, object detection, and telemetry.
 
 ## Dependencies and hardware
-Python 3 with Flask, Flask-SocketIO, OpenCV, NumPy, psutil, pyserial, pyttsx3, Ultralytics, and Supervision. ROS 2 `rclpy`/`sensor_msgs` must be installed from a compatible ROS distribution. Provide YOLO weights locally; they are not stored here.
+Python 3 with Flask, Flask-SocketIO, OpenCV, NumPy, psutil, pyserial, pyttsx3, and Ultralytics. ROS 2 `rclpy`/`sensor_msgs` are system dependencies. A local YOLO weights file and hardware are needed for those features.
 
 ## Setup and run
-Install Python and ROS 2 dependencies, configure camera/serial/audio devices, provide model weights, and start the active script.
+Install the runtime dependencies, review rover configuration and hardware settings, source ROS 2, and start the application.
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install flask flask-socketio opencv-python numpy psutil pyserial pyttsx3 ultralytics supervision
+pip install flask flask-socketio opencv-python numpy psutil pyserial pyttsx3 ultralytics
 # Install/source a compatible ROS 2 distribution with rclpy and sensor_msgs.
-
-python car_latest.py
+python app.py
 ```
 
 ## Changes from the previous available try
-Drops local movement/GPS simulation helpers; location updates are still accepted from an external client. The previous available stage in this history is try31.
+Major architecture refactor from one large Python file into focused modules while preserving dashboard scope. The previous available stage in this history is try32.
 
 ## Notes
-This snapshot has no Arduino sketch; pair it with the matching controller firmware. Live hardware/network setup is required for the removed simulation data paths.
+Review the installer before running it; configuration and hardware assumptions require local review.
