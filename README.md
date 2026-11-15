@@ -1,12 +1,11 @@
-# Multi-Robot Rover - try42
+# Multi-Robot Rover - try43
 
-This iteration strengthens joystick connection/status reporting and control-mode handling while removing duplicate controller copies.
+System utility coverage expands to network interfaces, uptime, disk/process data, GPU/host checks, and formatting helpers.
 
 ## Features
-- Adds joystick connection handling and a control-mode query route.
-- Expands hardware-controller connection, camera, sensor, joystick, and status helpers.
-- Updates camera/joystick settings in central configuration.
-- Removes duplicate controller source copies while preserving active modules.
+- Adds network, disk/GPU, uptime, process-count, and camera-connectivity diagnostics.
+- Retains the try42 modular dashboard and hardware features.
+- Provides safe conversion and formatting helpers used by diagnostics.
 
 ## Dependencies and hardware
 Python 3 with Flask, Flask-SocketIO, OpenCV, NumPy, psutil, pyserial, pyttsx3, requests, and Ultralytics. ROS 2 `rclpy`/`sensor_msgs` are system dependencies. A local YOLO weights file and hardware are needed for those features.
@@ -23,7 +22,7 @@ python app.py
 ```
 
 ## Changes from the previous available try
-Adds joystick connection/status and control-mode APIs and consolidates duplicate hardware/camera modules. The previous available stage in this history is try40.
+The principal code change is a broader `utils.py` diagnostics toolkit. The previous available stage in this history is try42.
 
 ## Notes
-Confirm joystick mappings and safe-stop behavior on the target host before operating motors.
+System/GPU metrics depend on operating system and drivers; unsupported metrics are not necessarily hardware failures.
