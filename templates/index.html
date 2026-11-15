@@ -66,13 +66,6 @@
         .status-joystick::before {
             background: #1565c0;
         }
-        .status-obstacle {
-            background: #fff3e0;
-            color: #e65100;
-        }
-        .status-obstacle::before {
-            background: #e65100;
-        }
         .dashboard {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -124,8 +117,11 @@
         .tilt-card {
             border-left: 4px solid #e67e22;
         }
-        .distance-card {
+        .pir-card {
             border-left: 4px solid #16a085;
+        }
+        .rain-card {
+            border-left: 4px solid #3498db;
         }
         .system-card {
             border-left: 4px solid #9b59b6;
@@ -156,8 +152,12 @@
             color: #e67e22;
             animation: pulse 0.5s infinite alternate;
         }
-        .distance-active {
+        .pir-active {
             color: #16a085;
+            animation: pulse 0.5s infinite alternate;
+        }
+        .rain-active {
+            color: #3498db;
             animation: pulse 0.5s infinite alternate;
         }
         @keyframes pulse {
@@ -234,10 +234,6 @@
         }
         .active-mode {
             background: #4CAF50 !important;
-            font-weight: bold;
-        }
-        .obstacle-mode {
-            background: #e65100 !important;
             font-weight: bold;
         }
         .section {
@@ -335,7 +331,6 @@
             <h3>Control Mode Selection</h3>
             <button class="mode-btn active-mode" onclick="setControlMode('BUTTONS')">Button Mode</button>
             <button class="mode-btn" onclick="setControlMode('JOYSTICK')">Joystick Mode</button>
-            <button class="mode-btn" onclick="setObstacleMode()">Obstacle Avoidance</button>
         </div>
         
         <div class="dashboard">
@@ -382,16 +377,27 @@
                             {{ 'TILT DETECTED!' if sensor_data.tilt_detected else 'Level' }}
                         </div>
                     </div>
-                    <div class="metric-card distance-card">
-                        <div class="metric-label">Distance</div>
-                        <div class="metric-value" id="distance">{{ sensor_data.distance or '--' }} cm</div>
-                        <div id="distance_status" class="metric-value" style="font-size: 1.0em;">
-                            {{ 'OBSTACLE DETECTED!' if sensor_data.distance and sensor_data.distance < 30 else 'Clear' }}
+                    <div class="metric-card pir-card">
+                        <div class="metric-label">Motion Detections</div>
+                        <div class="metric-value" id="pir_count">{{ sensor_data.pir_count }}</div>
+                        <div id="pir_status" class="metric-value" style="font-size: 1.0em;">
+                            {{ 'MOTION DETECTED!' if sensor_data.pir_detected else 'No Motion' }}
+                        </div>
+                    </div>
+                    <div class="metric-card rain-card">
+                        <div class="metric-label">Rain Detections</div>
+                        <div class="metric-value" id="rain_count">{{ sensor_data.rain_count }}</div>
+                        <div id="rain_status" class="metric-value" style="font-size: 1.0em;">
+                            {{ 'RAIN DETECTED!' if sensor_data.rain_detected else 'Dry' }}
                         </div>
                     </div>
                     <div class="metric-card system-card">
                         <div class="metric-label">CPU Temp</div>
                         <div class="metric-value" id="system_temp">{{ sensor_data.system_temp }}</div>
+                    </div>
+                    <div class="metric-card system-card">
+                        <div class="metric-label">CPU Usage</div>
+                        <div class="metric-value" id="cpu_usage">{{ sensor_data.cpu_usage }}</div>
                     </div>
                 </div>
             </div>
@@ -421,12 +427,12 @@
             <div class="connection-item">
                 <div class="connection-icon">A</div>
                 <div>
-                    <strong>Arduino Mega Connections</strong><br>
+                    <strong>Arduino Connections</strong><br>
                     <small>
-                        D22: IN1, D24: IN2, D26: IN3, D28: IN4 (Motor Driver)<br>
+                        D5: IN1, D6: IN2, D9: IN3, D10: IN4 (Motor Driver)<br>
                         D2: DHT11, A0: Sound Sensor, D3: Impact Sensor<br>
-                        D4: Touch Sensor, D5: Tilt Sensor (HW-505)<br>
-                        D47: Ultrasonic Trig, D49: Ultrasonic Echo, D12: Servo
+                        D4: Touch Sensor, D7: Tilt Sensor (HW-505)<br>
+                        D6: PIR Motion Sensor, A1: Rain Drop Sensor
                     </small>
                 </div>
             </div>
@@ -452,13 +458,17 @@
                 </div>
             </div>
             <div class="connection-item">
-                <div class="connection-icon">S</div>
+                <div class="connection-icon">P</div>
                 <div>
-                    <strong>Servo & Ultrasonic</strong><br>
-                    <small>
-                        Servo: D12 (PWM), Ultrasonic: Trig-D47, Echo-D49<br>
-                        Mounted together for obstacle scanning
-                    </small>
+                    <strong>PIR Motion Sensor</strong><br>
+                    <small>D6: Signal, 5V: Power, GND: Ground</small>
+                </div>
+            </div>
+            <div class="connection-item">
+                <div class="connection-icon">W</div>
+                <div>
+                    <strong>Rain Drop Sensor</strong><br>
+                    <small>A1: Signal, 5V: Power, GND: Ground</small>
                 </div>
             </div>
         </div>
@@ -541,6 +551,7 @@
             console.log("Sending command:", cmd);
             socket.emit('control', cmd);
             
+            // Add small delay to prevent command flooding
             buttonActive = true;
             setTimeout(() => {
                 buttonActive = false;
@@ -605,41 +616,22 @@
             .then(data => {
                 showStatus(data.status, true);
                 document.querySelectorAll('.mode-btn').forEach(btn => {
-                    btn.classList.remove('active-mode', 'obstacle-mode');
+                    btn.classList.remove('active-mode');
                 });
                 event.target.classList.add('active-mode');
                 
                 const modeElement = document.getElementById('control-mode');
                 modeElement.textContent = `Control Mode: ${mode}`;
                 if (mode === 'JOYSTICK') {
-                    modeElement.className = 'status-badge status-joystick';
+                    modeElement.classList.remove('status-connected');
+                    modeElement.classList.add('status-joystick');
                 } else {
-                    modeElement.className = 'status-badge status-connected';
+                    modeElement.classList.remove('status-joystick');
+                    modeElement.classList.add('status-connected');
                 }
             })
             .catch(error => {
                 showStatus('Error changing control mode', false);
-            });
-        }
-        
-        function setObstacleMode() {
-            fetch('/set_obstacle_mode/ON', {
-                method: 'POST'
-            })
-            .then(response => response.json())
-            .then(data => {
-                showStatus(data.status, true);
-                document.querySelectorAll('.mode-btn').forEach(btn => {
-                    btn.classList.remove('active-mode', 'obstacle-mode');
-                });
-                event.target.classList.add('obstacle-mode');
-                
-                const modeElement = document.getElementById('control-mode');
-                modeElement.textContent = 'Control Mode: OBSTACLE';
-                modeElement.className = 'status-badge status-obstacle';
-            })
-            .catch(error => {
-                showStatus('Error activating obstacle mode', false);
             });
         }
         
@@ -650,6 +642,7 @@
             const backwardBtn = document.getElementById('backward-btn');
             const stopBtn = document.getElementById('stop-btn');
             
+            // Set button press handlers
             forwardBtn.addEventListener('mousedown', () => handleButtonDown('F'));
             forwardBtn.addEventListener('touchstart', () => handleButtonDown('F'));
             
@@ -662,6 +655,7 @@
             backwardBtn.addEventListener('mousedown', () => handleButtonDown('B'));
             backwardBtn.addEventListener('touchstart', () => handleButtonDown('B'));
             
+            // Set button release handlers
             forwardBtn.addEventListener('mouseup', handleButtonUp);
             forwardBtn.addEventListener('touchend', handleButtonUp);
             
@@ -674,6 +668,7 @@
             backwardBtn.addEventListener('mouseup', handleButtonUp);
             backwardBtn.addEventListener('touchend', handleButtonUp);
             
+            // Stop button
             stopBtn.addEventListener('click', () => sendCommand('S'));
         }
         
@@ -681,6 +676,7 @@
             document.getElementById('temperature').textContent = data.temperature;
             document.getElementById('humidity').textContent = data.humidity;
             
+            // Impact detection
             document.getElementById('impact_count').textContent = data.impact_count;
             const impactStatus = document.getElementById('impact_status');
             impactStatus.textContent = data.impact_detected ? 'IMPACT DETECTED!' : 'Normal';
@@ -689,6 +685,7 @@
                 setTimeout(() => impactStatus.classList.remove('impact-active'), 1000);
             }
             
+            // Sound detection
             document.getElementById('sound_count').textContent = data.sound_count;
             const soundStatus = document.getElementById('sound_status');
             soundStatus.textContent = data.sound_detected ? 'LOUD SOUND DETECTED!' : 'Quiet';
@@ -697,6 +694,7 @@
                 setTimeout(() => soundStatus.classList.remove('sound-active'), 1000);
             }
             
+            // Touch detection
             document.getElementById('touch_count').textContent = data.touch_count;
             const touchStatus = document.getElementById('touch_status');
             touchStatus.textContent = data.touch_detected ? 'TOUCH DETECTED!' : 'No Touch';
@@ -705,6 +703,7 @@
                 setTimeout(() => touchStatus.classList.remove('touch-active'), 1000);
             }
             
+            // Tilt detection
             document.getElementById('tilt_count').textContent = data.tilt_count;
             const tiltStatus = document.getElementById('tilt_status');
             tiltStatus.textContent = data.tilt_detected ? 'TILT DETECTED!' : 'Level';
@@ -713,12 +712,22 @@
                 setTimeout(() => tiltStatus.classList.remove('tilt-active'), 1000);
             }
             
-            document.getElementById('distance').textContent = data.distance !== undefined ? `${data.distance} cm` : '--';
-            const distanceStatus = document.getElementById('distance_status');
-            distanceStatus.textContent = (data.distance && data.distance < 30) ? 'OBSTACLE DETECTED!' : 'Clear';
-            if (data.distance && data.distance < 30) {
-                distanceStatus.classList.add('distance-active');
-                setTimeout(() => distanceStatus.classList.remove('distance-active'), 1000);
+            // PIR detection
+            document.getElementById('pir_count').textContent = data.pir_count;
+            const pirStatus = document.getElementById('pir_status');
+            pirStatus.textContent = data.pir_detected ? 'MOTION DETECTED!' : 'No Motion';
+            if (data.pir_detected) {
+                pirStatus.classList.add('pir-active');
+                setTimeout(() => pirStatus.classList.remove('pir-active'), 1000);
+            }
+            
+            // Rain detection
+            document.getElementById('rain_count').textContent = data.rain_count;
+            const rainStatus = document.getElementById('rain_status');
+            rainStatus.textContent = data.rain_detected ? 'RAIN DETECTED!' : 'Dry';
+            if (data.rain_detected) {
+                rainStatus.classList.add('rain-active');
+                setTimeout(() => rainStatus.classList.remove('rain-active'), 1000);
             }
             
             document.getElementById('system_temp').textContent = data.system_temp;
@@ -735,21 +744,19 @@
             showStatus('Control error: ' + data.message, false);
         });
         
+        // Initialize active mode on page load
         document.addEventListener('DOMContentLoaded', function() {
             const initialMode = "{{ sensor_data.control_mode }}";
-            if (initialMode === 'OBSTACLE') {
-                document.querySelector('.mode-btn[onclick="setObstacleMode()"]').classList.add('obstacle-mode');
-            } else {
-                document.querySelector(`.mode-btn[onclick*="${initialMode}"]`).classList.add('active-mode');
-            }
+            document.querySelector(`.mode-btn[onclick*="${initialMode}"]`).classList.add('active-mode');
             
+            // Set initial control mode badge
             const modeElement = document.getElementById('control-mode');
             if (initialMode === 'JOYSTICK') {
-                modeElement.className = 'status-badge status-joystick';
-            } else if (initialMode === 'OBSTACLE') {
-                modeElement.className = 'status-badge status-obstacle';
+                modeElement.classList.remove('status-connected');
+                modeElement.classList.add('status-joystick');
             }
             
+            // Initialize button controls
             initButtonControls();
         });
     </script>

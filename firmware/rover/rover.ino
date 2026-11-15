@@ -1,32 +1,18 @@
 #include <DHT.h>
-#include <IRremote.h>
 
-// Motor control pins
-#define IN1 5
-#define IN2 6
-#define IN3 9
-#define IN4 10
+// Motor control pins (adjusted for Mega)
+#define IN1 22
+#define IN2 24
+#define IN3 26
+#define IN4 28
 
 // DHT11 Sensor
 #define DHTPIN 2
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
-// IR Receiver
-#define IR_RECV_PIN 14  // Using A0 as digital pin 14
-IRrecv irrecv(IR_RECV_PIN);
-decode_results results;
-
-// IR Command Definitions (NEC protocol)
-#define IR_CMD_FORWARD   0x00FF18E7
-#define IR_CMD_BACKWARD  0x00FF4AB5
-#define IR_CMD_LEFT      0x00FF10EF
-#define IR_CMD_RIGHT     0x00FF5AA5
-#define IR_CMD_STOP      0x00FF38C7
-#define IR_CMD_MODE_SWITCH 0x00FFA25D
-
-// Sound Sensor (moved to A1)
-#define SOUND_PIN A1
+// Sound Sensor
+#define SOUND_PIN A0
 #define SOUND_THRESHOLD 100
 unsigned long lastSoundTime = 0;
 #define SOUND_COOLDOWN 1000
@@ -35,7 +21,7 @@ bool soundDetected = false;
 unsigned long soundLedStartTime = 0;
 bool soundLedActive = false;
 
-// Impact Sensor
+// Impact Sensor (using interrupt-capable pin on Mega)
 #define SHOCK_PIN 3
 #define IMPACT_WINDOW_MS 50
 #define MIN_BOUNCES 1
@@ -56,10 +42,10 @@ bool impactLedActive = false;
 bool buzzerActive = false;
 unsigned long buzzerStartTime = 0;
 
-// SMD RGB LED
-#define LED_RED_PIN 11
-#define LED_GREEN_PIN 12
-#define LED_BLUE_PIN 13
+// SMD RGB LED (Common Cathode) - using PWM-capable pins
+#define LED_RED_PIN 9
+#define LED_GREEN_PIN 10
+#define LED_BLUE_PIN 11
 unsigned long tiltLedStartTime = 0;
 bool tiltLedActive = false;
 
@@ -70,16 +56,27 @@ int touchEvents = 0;
 unsigned long lastTouchTime = 0;
 #define TOUCH_COOLDOWN 500
 
-// Tilt Sensor
-#define TILT_PIN 7
+// Tilt Sensor (HW-505)
+#define TILT_PIN 5
 bool tiltDetected = false;
 int tiltEvents = 0;
 unsigned long lastTiltTime = 0;
 #define TILT_COOLDOWN 1000
 
-// Control Mode
-enum ControlMode { BUTTON_MODE, JOYSTICK_MODE, IR_TR_MODE };
-ControlMode currentMode = BUTTON_MODE;
+// PIR Motion Sensor
+#define PIR_PIN 6
+bool pirDetected = false;
+int pirEvents = 0;
+unsigned long lastPirTime = 0;
+#define PIR_COOLDOWN 2000
+
+// Rain Drop Sensor
+#define RAIN_PIN A1
+#define RAIN_THRESHOLD 500  // Adjust based on your sensor's sensitivity
+bool rainDetected = false;
+int rainEvents = 0;
+unsigned long lastRainTime = 0;
+#define RAIN_COOLDOWN 2000
 
 // Sensor timing
 unsigned long lastSensorReadTime = 0;
@@ -105,14 +102,19 @@ void handleBuzzer() {
 }
 
 void handleLEDs() {
+  // Handle sound LED (Blue)
   if (soundLedActive && (millis() - soundLedStartTime >= 1000)) {
     digitalWrite(LED_BLUE_PIN, LOW);
     soundLedActive = false;
   }
+  
+  // Handle impact LED (Red)
   if (impactLedActive && (millis() - impactLedStartTime >= 1000)) {
     digitalWrite(LED_RED_PIN, LOW);
     impactLedActive = false;
   }
+  
+  // Handle tilt LED (Green)
   if (tiltLedActive && (millis() - tiltLedStartTime >= 1000)) {
     digitalWrite(LED_GREEN_PIN, LOW);
     tiltLedActive = false;
@@ -162,8 +164,12 @@ void handleImpact() {
     impactDetected = true;
     lastImpactTime = currentTime;
     bounceCount = 0;
-    if (!buzzerActive) triggerBuzzer();
-    if (!impactLedActive) triggerImpactLED();
+    if (!buzzerActive) {
+      triggerBuzzer();
+    }
+    if (!impactLedActive) {
+      triggerImpactLED();
+    }
   }
 }
 
@@ -173,7 +179,9 @@ void checkSoundSensor() {
     soundEvents++;
     soundDetected = true;
     lastSoundTime = millis();
-    if (!soundLedActive) triggerSoundLED();
+    if (!soundLedActive) {
+      triggerSoundLED();
+    }
   }
 }
 
@@ -192,7 +200,27 @@ void checkTiltSensor() {
     tiltEvents++;
     tiltDetected = true;
     lastTiltTime = millis();
-    if (!tiltLedActive) triggerTiltLED();
+    if (!tiltLedActive) {
+      triggerTiltLED();
+    }
+  }
+}
+
+void checkPirSensor() {
+  int pirValue = digitalRead(PIR_PIN);
+  if (pirValue == HIGH && millis() - lastPirTime > PIR_COOLDOWN) {
+    pirEvents++;
+    pirDetected = true;
+    lastPirTime = millis();
+  }
+}
+
+void checkRainSensor() {
+  int rainValue = analogRead(RAIN_PIN);
+  if (rainValue < RAIN_THRESHOLD && millis() - lastRainTime > RAIN_COOLDOWN) {
+    rainEvents++;
+    rainDetected = true;
+    lastRainTime = millis();
   }
 }
 
@@ -201,10 +229,16 @@ void resetAllSensors() {
   soundEvents = 0;
   touchEvents = 0;
   tiltEvents = 0;
+  pirEvents = 0;
+  rainEvents = 0;
   impactDetected = false;
   soundDetected = false;
   touchDetected = false;
   tiltDetected = false;
+  pirDetected = false;
+  rainDetected = false;
+  
+  // Turn off all LEDs
   digitalWrite(LED_RED_PIN, LOW);
   digitalWrite(LED_GREEN_PIN, LOW);
   digitalWrite(LED_BLUE_PIN, LOW);
@@ -216,11 +250,13 @@ void resetAllSensors() {
 bool readDHTData(float &temperature, float &humidity) {
   temperature = dht.readTemperature();
   humidity = dht.readHumidity();
+  
   if (isnan(temperature) || isnan(humidity)) {
     delay(100);
     temperature = dht.readTemperature();
     humidity = dht.readHumidity();
   }
+  
   return !(isnan(temperature) || isnan(humidity));
 }
 
@@ -248,12 +284,22 @@ void sendSensorData() {
   Serial.print(tiltEvents);
   Serial.print(",");
   Serial.print(tiltDetected ? "1" : "0");
+  Serial.print(",");
+  Serial.print(pirEvents);
+  Serial.print(",");
+  Serial.print(pirDetected ? "1" : "0");
+  Serial.print(",");
+  Serial.print(rainEvents);
+  Serial.print(",");
+  Serial.print(rainDetected ? "1" : "0");
   Serial.println();
   
   impactDetected = false;
   soundDetected = false;
   touchDetected = false;
   tiltDetected = false;
+  pirDetected = false;
+  rainDetected = false;
 }
 
 void forward() {
@@ -291,25 +337,6 @@ void stopMotors() {
   Serial.println("Stopped");
 }
 
-void processIRCommand() {
-  if (irrecv.decode(&results)) {
-    if (currentMode == IR_TR_MODE) {
-      switch(results.value) {
-        case IR_CMD_FORWARD: forward(); break;
-        case IR_CMD_BACKWARD: backward(); break;
-        case IR_CMD_LEFT: left(); break;
-        case IR_CMD_RIGHT: right(); break;
-        case IR_CMD_STOP: stopMotors(); break;
-        case IR_CMD_MODE_SWITCH:
-          currentMode = BUTTON_MODE;
-          Serial.println("Mode switched to BUTTON");
-          break;
-      }
-    }
-    irrecv.resume();
-  }
-}
-
 void setup() {
   Serial.begin(115200);
   while (!Serial) {
@@ -329,44 +356,40 @@ void setup() {
   pinMode(SHOCK_PIN, INPUT_PULLUP);
   pinMode(TOUCH_PIN, INPUT);
   pinMode(TILT_PIN, INPUT_PULLUP);
+  pinMode(PIR_PIN, INPUT);
+  pinMode(RAIN_PIN, INPUT);
   
-  // Initialize buzzer and LEDs
+  // Initialize buzzer
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
+  
+  // Initialize RGB LED
   setupLEDs();
   
-  // Initialize IR receiver
-  irrecv.enableIRIn();
-  
+  // Attach interrupt - Mega has more interrupt pins than Uno
   attachInterrupt(digitalPinToInterrupt(SHOCK_PIN), handleImpact, FALLING);
   
-  Serial.println("System initialized");
+  Serial.println("System initialized - Mega Version");
 }
 
 void loop() {
+  // Handle buzzer timing
   handleBuzzer();
+  
+  // Handle LED timing
   handleLEDs();
-  processIRCommand();
 
+  // Handle serial commands
   if (Serial.available() > 0) {
     char command = Serial.read();
     switch(command) {
-      case 'F': if (currentMode == BUTTON_MODE) forward(); break;
-      case 'B': if (currentMode == BUTTON_MODE) backward(); break;
-      case 'L': if (currentMode == BUTTON_MODE) left(); break;
-      case 'R': if (currentMode == BUTTON_MODE) right(); break;
+      case 'F': forward(); break;
+      case 'B': backward(); break;
+      case 'L': left(); break;
+      case 'R': right(); break;
       case 'S': stopMotors(); break;
       case 'X': resetAllSensors(); break;
       case 'D': sendSensorData(); break;
-      case 'M': 
-        currentMode = (ControlMode)((currentMode + 1) % 3);
-        Serial.print("Mode switched to ");
-        switch(currentMode) {
-          case BUTTON_MODE: Serial.println("BUTTON"); break;
-          case JOYSTICK_MODE: Serial.println("JOYSTICK"); break;
-          case IR_TR_MODE: Serial.println("IR-TR"); break;
-        }
-        break;
       default: 
         Serial.print("Unknown command: ");
         Serial.println(command);
@@ -374,10 +397,14 @@ void loop() {
     }
   }
 
+  // Check sensors
   checkSoundSensor();
   checkTouchSensor();
   checkTiltSensor();
+  checkPirSensor();
+  checkRainSensor();
   
+  // Send sensor data at regular intervals
   if (millis() - lastSensorReadTime > SENSOR_READ_INTERVAL) {
     sendSensorData();
     lastSensorReadTime = millis();

@@ -6,7 +6,6 @@ import signal
 import threading
 import serial
 import cv2
-import numpy as np
 import psutil
 import socket
 from datetime import datetime
@@ -21,6 +20,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RECORDINGS_DIR = os.path.join(BASE_DIR, 'recordings')
 SENSOR_DATA_DIR = '/opt/rover/sensors'
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
+PLACEHOLDER_PATH = os.path.join(STATIC_DIR, 'placeholder.jpg')
 
 # Global variables
 arduino = None
@@ -46,7 +46,10 @@ sensor_data = {
     'touch_detected': False,
     'tilt_count': 0,
     'tilt_detected': False,
-    'distance': None,
+    'pir_count': 0,
+    'pir_detected': False,
+    'rain_count': 0,
+    'rain_detected': False,
     'system_temp': None,
     'cpu_usage': None,
     'memory_usage': None,
@@ -106,7 +109,14 @@ def log_sensor_data():
                 'count': sensor_data['tilt_count'],
                 'detected': sensor_data['tilt_detected']
             },
-            'distance': sensor_data['distance']
+            'pir': {
+                'count': sensor_data['pir_count'],
+                'detected': sensor_data['pir_detected']
+            },
+            'rain': {
+                'count': sensor_data['rain_count'],
+                'detected': sensor_data['rain_detected']
+            }
         },
         'system': {
             'temperature': sensor_data['system_temp'],
@@ -143,78 +153,52 @@ def update_system_metrics():
 
 def init_hardware():
     global arduino, camera, arduino_connected
-    
-    # Arduino initialization
-    ports = ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyUSB0']
-    for port in ports:
+    # Try to connect to Arduino
+    for port in ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyUSB0']:
         try:
             if arduino is not None:
-                try:
-                    arduino.close()
-                except:
-                    pass
-            
-            print(f"Attempting to connect to Arduino on {port}")
+                arduino.close()
             arduino = serial.Serial(port, 115200, timeout=1)
-            time.sleep(2)  # Important delay for Arduino reset
-            
-            # Test connection
-            arduino.write('D'.encode())
-            time.sleep(0.1)
-            if arduino.in_waiting:
-                response = arduino.readline().decode().strip()
-                if response.startswith("SENSORS:"):
-                    arduino_connected = True
-                    print(f"Arduino successfully connected on {port}")
-                    break
-                
-            arduino.close()
+            time.sleep(2)
+            arduino_connected = True
+            sensor_data['arduino_connected'] = True
+            print(f"Arduino connected on {port}")
+            socketio.emit('connection_update', {
+                'arduino_connected': True,
+                'camera_connected': camera is not None
+            })
+            break
         except Exception as e:
-            print(f"Failed to connect to Arduino on {port}: {str(e)}")
+            print(f"Failed to connect to Arduino on {port}: {e}")
+            arduino_connected = False
+            sensor_data['arduino_connected'] = False
     
-    # Camera initialization
-    if camera is not None:
-        try:
+    # Try to connect to camera
+    try:
+        if camera is not None:
             camera.release()
-        except:
-            pass
-    
-    # Try all possible camera indexes with proper cleanup
-    for i in range(0, 4):
-        try:
+        for i in range(0, 4):
             cap = cv2.VideoCapture(i, cv2.CAP_V4L2)
             if cap.isOpened():
-                print(f"Testing camera index {i}")
-                # Test if camera can actually capture frames
-                ret, frame = cap.read()
-                if ret:
-                    print(f"Camera working at index {i}")
-                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, camera_resolution[0])
-                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_resolution[1])
-                    cap.set(cv2.CAP_PROP_FPS, camera_fps)
-                    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-                    camera = cap
-                    break
-                else:
-                    print(f"Camera at index {i} opened but can't capture frames")
-                    cap.release()
-            else:
-                print(f"Camera not found at index {i}")
-        except Exception as e:
-            print(f"Error testing camera index {i}: {str(e)}")
-    
-    if camera is None:
-        print("Warning: No working camera found!")
-    
-    socketio.emit('connection_update', {
-        'arduino_connected': arduino_connected,
-        'camera_connected': camera is not None and camera.isOpened()
-    })
+                print(f"Camera found at index {i}")
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, camera_resolution[0])
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_resolution[1])
+                cap.set(cv2.CAP_PROP_FPS, camera_fps)
+                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+                camera = cap
+                socketio.emit('connection_update', {
+                    'arduino_connected': arduino_connected,
+                    'camera_connected': True
+                })
+                break
+    except Exception as e:
+        print(f"Error initializing camera: {e}")
 
 def check_connections():
     global arduino_connected
     while running:
         try:
+            # Check Arduino connection
             if arduino is not None:
                 try:
                     arduino.write('D'.encode())
@@ -224,6 +208,7 @@ def check_connections():
             else:
                 arduino_connected = False
             
+            # Check camera connection
             camera_connected = camera is not None and camera.isOpened()
             
             sensor_data['arduino_connected'] = arduino_connected
@@ -236,15 +221,6 @@ def check_connections():
         except Exception as e:
             print(f"Error checking connections: {e}")
             time.sleep(10)
-
-def check_camera_health():
-    global camera
-    while running:
-        time.sleep(10)
-        with camera_lock:
-            if camera is not None and not camera.isOpened():
-                print("Camera disconnected, attempting to reconnect...")
-                init_hardware()
 
 def read_sensor_data():
     global arduino, sensor_data, running, arduino_connected
@@ -259,7 +235,7 @@ def read_sensor_data():
                 line = arduino.readline().decode('utf-8').strip()
                 if line.startswith('SENSORS:'):
                     parts = line[8:].split(',')
-                    if len(parts) == 11:
+                    if len(parts) == 14:
                         sensor_data.update({
                             'temperature': float(parts[0]) if parts[0] != 'NaN' else None,
                             'humidity': float(parts[1]) if parts[1] != 'NaN' else None,
@@ -271,7 +247,10 @@ def read_sensor_data():
                             'touch_detected': bool(int(parts[7])),
                             'tilt_count': int(parts[8]),
                             'tilt_detected': bool(int(parts[9])),
-                            'distance': int(parts[10]) if parts[10] else None,
+                            'pir_count': int(parts[10]),
+                            'pir_detected': bool(int(parts[11])),
+                            'rain_count': int(parts[12]),
+                            'rain_detected': bool(int(parts[13])),
                             'last_update': datetime.now().strftime('%H:%M:%S'),
                             'arduino_connected': True
                         })
@@ -287,7 +266,10 @@ def read_sensor_data():
                             'touch_detected': sensor_data['touch_detected'],
                             'tilt_count': sensor_data['tilt_count'],
                             'tilt_detected': sensor_data['tilt_detected'],
-                            'distance': sensor_data['distance'],
+                            'pir_count': sensor_data['pir_count'],
+                            'pir_detected': sensor_data['pir_detected'],
+                            'rain_count': sensor_data['rain_count'],
+                            'rain_detected': sensor_data['rain_detected'],
                             'system_temp': f"{sensor_data['system_temp'] or '--'}°C",
                             'cpu_usage': f"{sensor_data['cpu_usage'] or '--'}%",
                             'memory_usage': f"{sensor_data['memory_usage'] or '--'}%",
@@ -296,7 +278,7 @@ def read_sensor_data():
                             'control_mode': sensor_data['control_mode']
                         }
                         socketio.emit('sensor_update', display_data)
-                elif line:
+                elif line:  # Print any other messages from Arduino
                     print(f"Arduino: {line}")
         except Exception as e:
             print(f"Error reading sensor data: {e}")
@@ -305,53 +287,43 @@ def read_sensor_data():
             time.sleep(1)
 
 def generate_frames():
-    # Create a simple black frame as fallback
-    fallback_frame = np.zeros((480, 640, 3), dtype=np.uint8)
-    cv2.putText(fallback_frame, "Camera Not Available", (50, 240), 
-               cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-    
     try:
-        _, buffer = cv2.imencode('.jpg', fallback_frame, [cv2.IMWRITE_JPEG_QUALITY, camera_quality])
-        fallback_bytes = buffer.tobytes()
-    except:
-        fallback_bytes = b''
+        placeholder = cv2.imread(PLACEHOLDER_PATH)
+        _, buffer = cv2.imencode('.jpg', placeholder, [cv2.IMWRITE_JPEG_QUALITY, camera_quality])
+        placeholder_bytes = buffer.tobytes()
+    except Exception as e:
+        print(f"Error loading placeholder image: {e}")
+        placeholder_bytes = b''
     
     while running:
-        frame_bytes = fallback_bytes
+        frame_bytes = placeholder_bytes
         
         if camera is not None:
-            try:
-                with camera_lock:
-                    if not camera.isOpened():
-                        init_hardware()
-                        time.sleep(0.1)
-                        continue
-                        
-                    ret, frame = camera.read()
-                    if ret:
-                        if not recording:
-                            y_position = 30
-                            cv2.putText(frame, f"Temp: {sensor_data['temperature'] or '--'}°C", (10, y_position),
-                                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                            y_position += 30
-                            cv2.putText(frame, f"Mode: {current_control_mode}", (10, y_position),
-                                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-                            y_position += 30
-                            cv2.putText(frame, f"Tilt: {'YES' if sensor_data['tilt_detected'] else 'NO'}", (10, y_position),
-                                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-                            y_position += 30
-                            cv2.putText(frame, f"Distance: {sensor_data['distance'] or '--'} cm", (10, y_position),
-                                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-                        
-                        if recording and video_writer is not None:
-                            video_writer.write(frame)
-                        
-                        _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, camera_quality])
-                        frame_bytes = buffer.tobytes()
-            except Exception as e:
-                print(f"Camera error: {str(e)}")
-                init_hardware()
-                time.sleep(0.5)
+            with camera_lock:
+                ret, frame = camera.read()
+                if ret:
+                    if not recording:
+                        y_position = 30
+                        cv2.putText(frame, f"Temp: {sensor_data['temperature'] or '--'}°C", (10, y_position),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                        y_position += 30
+                        cv2.putText(frame, f"Mode: {current_control_mode}", (10, y_position),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                        y_position += 30
+                        cv2.putText(frame, f"Tilt: {'YES' if sensor_data['tilt_detected'] else 'NO'}", (10, y_position),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+                        y_position += 30
+                        cv2.putText(frame, f"Motion: {'YES' if sensor_data['pir_detected'] else 'NO'}", (10, y_position),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                        y_position += 30
+                        cv2.putText(frame, f"Rain: {'YES' if sensor_data['rain_detected'] else 'NO'}", (10, y_position),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
+                    
+                    if recording and video_writer is not None:
+                        video_writer.write(frame)
+                    
+                    _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, camera_quality])
+                    frame_bytes = buffer.tobytes()
         
         yield (b'--frame\r\n'
               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
@@ -422,7 +394,10 @@ def index():
         'touch_detected': sensor_data['touch_detected'],
         'tilt_count': sensor_data['tilt_count'],
         'tilt_detected': sensor_data['tilt_detected'],
-        'distance': sensor_data['distance'],
+        'pir_count': sensor_data['pir_count'],
+        'pir_detected': sensor_data['pir_detected'],
+        'rain_count': sensor_data['rain_count'],
+        'rain_detected': sensor_data['rain_detected'],
         'system_temp': f"{sensor_data['system_temp'] or '--'}°C",
         'cpu_usage': f"{sensor_data['cpu_usage'] or '--'}%",
         'memory_usage': f"{sensor_data['memory_usage'] or '--'}%",
@@ -489,40 +464,11 @@ def set_control_mode(mode):
         return {"status": f"Control mode set to {mode}"}
     return {"status": "Invalid mode"}, 400
 
-@app.route('/set_obstacle_mode/<state>', methods=['POST'])
-def set_obstacle_mode(state):
-    global current_control_mode
-    if state == 'ON' and arduino is not None and arduino_connected:
-        try:
-            arduino.write('A'.encode())
-            current_control_mode = 'OBSTACLE'
-            sensor_data['control_mode'] = 'OBSTACLE'
-            socketio.emit('control_mode_update', {'mode': 'OBSTACLE'})
-            
-            # Ensure camera keeps working
-            with camera_lock:
-                if camera is not None and not camera.isOpened():
-                    init_hardware()
-                    
-            return {"status": "Obstacle avoidance mode activated"}
-        except Exception as e:
-            return {"status": f"Error: {str(e)}"}, 500
-    elif state == 'OFF' and arduino is not None and arduino_connected:
-        try:
-            arduino.write('S'.encode())
-            current_control_mode = 'BUTTONS'
-            sensor_data['control_mode'] = 'BUTTONS'
-            socketio.emit('control_mode_update', {'mode': 'BUTTONS'})
-            return {"status": "Obstacle avoidance mode deactivated"}
-        except Exception as e:
-            return {"status": f"Error: {str(e)}"}, 500
-    return {"status": "Invalid request"}, 400
-
 @socketio.on('control')
 def handle_control(command):
     global arduino_connected
     
-    if current_control_mode != 'OBSTACLE' and arduino is not None and arduino_connected:
+    if current_control_mode == 'BUTTONS' and arduino is not None and arduino_connected:
         try:
             print(f"Sending command to Arduino: {command}")
             arduino.write(command.encode())
@@ -564,6 +510,7 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
+    # Create required directories if they don't exist
     os.makedirs(RECORDINGS_DIR, exist_ok=True)
     os.makedirs(SENSOR_DATA_DIR, exist_ok=True)
     os.makedirs(STATIC_DIR, exist_ok=True)
@@ -572,7 +519,6 @@ if __name__ == '__main__':
     threading.Thread(target=update_system_metrics, daemon=True).start()
     threading.Thread(target=read_sensor_data, daemon=True).start()
     threading.Thread(target=check_connections, daemon=True).start()
-    threading.Thread(target=check_camera_health, daemon=True).start()
     
     try:
         socketio.run(app, host='0.0.0.0', port=5000, debug=False)
