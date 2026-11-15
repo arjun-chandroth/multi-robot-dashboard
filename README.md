@@ -1,26 +1,27 @@
-# Multi-Robot Rover - try8
+# Multi-Robot Rover - try10
 
-A standalone joystick-to-serial experiment replaces the rover sensor sketch for this stage.
+The rover firmware resumes with DHT11, sound, and impact sensing and adds touch-event detection.
 
 ## Features
-- Reads X/Y axes and a mode button from an analog joystick module.
-- Maps axes to a signed range, applies a center deadzone, and transmits at about 20 Hz.
-- Sends `JOY:x,y` packets and button-driven `MODE:` updates.
+- Controls the motor driver and periodically reports sensor state.
+- Counts impact, sound, and touch events with per-sensor cooldowns.
+- Provides reset-all-sensors behavior and retries unsuccessful DHT11 readings.
 
 ## Dependencies and hardware
-Arduino AVR board, two-axis analog joystick module, and a momentary mode button.
+Arduino AVR board and the modules listed in the sketch pin map. Install DHT Sensor Library.
 
 ## Setup and run
 Install the board core/libraries, review pin assignments and hardware polarity, then compile/upload the sketch shown below.
 
 ```bash
 arduino-cli core install arduino:avr
-arduino-cli compile --fqbn arduino:avr:mega firmware/joystick
-arduino-cli upload -p <PORT> --fqbn arduino:avr:mega firmware/joystick
+arduino-cli lib install "DHT sensor library"
+arduino-cli compile --fqbn arduino:avr:mega firmware/rover
+arduino-cli upload -p <PORT> --fqbn arduino:avr:mega firmware/rover
 ```
 
 ## Changes from the previous available try
-Switches from try7 rover sensor firmware to a focused joystick input test.
+Returns to rover motor/sensor firmware and adds a touch sensor to the earlier combination. The previous available stage in this history is try8.
 
 ## Notes
-This is an input protocol experiment, not a complete motor-control firmware.
+The try8 joystick sketch is not included in this stage snapshot.
