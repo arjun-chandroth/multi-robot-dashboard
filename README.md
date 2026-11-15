@@ -1,11 +1,11 @@
-# Multi-Robot Rover - try15
+# Multi-Robot Rover - try16
 
-This stage extends the sensor telemetry with an MQ-2 gas sensor.
+The rover sensor set expands with flame detection while retaining the browser dashboard and accelerometer data.
 
 ## Features
-- Adds gas-event counting and threshold status to firmware telemetry.
-- Displays gas readings/status in the dashboard.
-- Retains accelerometer, camera, serial motor commands, and host metrics.
+- Adds flame sensor state/count telemetry and a dashboard indicator.
+- Retains gas, accelerometer, PIR/rain, touch/tilt, sound, and impact readings.
+- Continues serial motor control, camera streaming, and host monitoring.
 
 ## Dependencies and hardware
 Python 3 with Flask, Flask-SocketIO, OpenCV, psutil, and pyserial; No NumPy dependency is needed by this stage. Arduino AVR board and the modules identified in the firmware. No pinned Python dependency manifest is provided.
@@ -30,7 +30,7 @@ arduino-cli upload -p <PORT> --fqbn arduino:avr:mega firmware/rover
 ```
 
 ## Changes from the previous available try
-Adds MQ-2 gas detection and its dashboard fields. The previous available stage in this history is try14.
+Adds a flame sensor and its threshold/event fields to firmware and the dashboard. The previous available stage in this history is try15.
 
 ## Notes
-MQ-2 readings require warm-up and calibration; the threshold is not a certified safety limit.
+A hobby flame sensor is not a fire alarm or life-safety device.

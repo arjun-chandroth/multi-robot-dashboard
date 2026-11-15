@@ -215,6 +215,9 @@
         .gas-card {
             border-left: 4px solid #9b59b6;
         }
+        .flame-card {
+            border-left: 4px solid #ff5722;
+        }
         .system-card {
             border-left: 4px solid #9b59b6;
         }
@@ -254,6 +257,10 @@
         }
         .gas-active {
             color: #9b59b6;
+            animation: pulse 0.5s infinite alternate;
+        }
+        .flame-active {
+            color: #ff5722;
             animation: pulse 0.5s infinite alternate;
         }
         @keyframes pulse {
@@ -461,6 +468,13 @@
                             {{ 'GAS DETECTED!' if sensor_data.gas_detected else 'Normal' }}
                         </div>
                     </div>
+                    <div class="metric-card flame-card">
+                        <div class="metric-label">Flame Detections</div>
+                        <div class="metric-value" id="flame_count">{{ sensor_data.flame_count }}</div>
+                        <div id="flame_status" class="metric-value" style="font-size: 1.0em;">
+                            {{ 'FLAME DETECTED!' if sensor_data.flame_detected else 'No Flame' }}
+                        </div>
+                    </div>
                     <div class="metric-card system-card">
                         <div class="metric-label">CPU Temp</div>
                         <div class="metric-value" id="system_temp">{{ sensor_data.system_temp }}</div>
@@ -509,7 +523,8 @@
                             D2: DHT11, A0: Sound Sensor, D3: Impact Sensor<br>
                             D4: Touch Sensor, D7: Tilt Sensor (HW-505)<br>
                             D6: PIR Motion Sensor, A1: Rain Drop Sensor<br>
-                            A2: MQ2 Gas Sensor, I2C: ADXL345 Accelerometer
+                            A2: MQ2 Gas Sensor, A3: Flame Sensor<br>
+                            I2C: ADXL345 Accelerometer
                         </small>
                     </div>
                 </div>
@@ -553,6 +568,13 @@
                     <div>
                         <strong>MQ2 Gas Sensor</strong><br>
                         <small>A2: Signal, 5V: Power, GND: Ground</small>
+                    </div>
+                </div>
+                <div class="connection-item">
+                    <div class="connection-icon">F</div>
+                    <div>
+                        <strong>Flame Sensor</strong><br>
+                        <small>A3: Signal, 5V: Power, GND: Ground</small>
                     </div>
                 </div>
                 <div class="connection-item">
@@ -879,6 +901,15 @@
                 setTimeout(() => gasStatus.classList.remove('gas-active'), 1000);
             }
             
+            // Flame detection
+            document.getElementById('flame_count').textContent = data.flame_count;
+            const flameStatus = document.getElementById('flame_status');
+            flameStatus.textContent = data.flame_detected ? 'FLAME DETECTED!' : 'No Flame';
+            if (data.flame_detected) {
+                flameStatus.classList.add('flame-active');
+                setTimeout(() => flameStatus.classList.remove('flame-active'), 1000);
+            }
+            
             // Accelerometer data
             document.getElementById('accel_x').textContent = data.accel_x;
             document.getElementById('accel_y').textContent = data.accel_y;
@@ -916,6 +947,9 @@
             if (initialMode === 'JOYSTICK') {
                 modeElement.classList.remove('status-connected');
                 modeElement.classList.add('status-joystick');
+            } else {
+                modeElement.classList.remove('status-joystick');
+                modeElement.classList.add('status-connected');
             }
             
             // Initialize button controls

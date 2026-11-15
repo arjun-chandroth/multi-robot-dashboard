@@ -89,6 +89,14 @@ int gasEvents = 0;
 unsigned long lastGasTime = 0;
 #define GAS_COOLDOWN 2000
 
+// Flame Sensor
+#define FLAME_PIN A3
+#define FLAME_THRESHOLD 200
+bool flameDetected = false;
+int flameEvents = 0;
+unsigned long lastFlameTime = 0;
+#define FLAME_COOLDOWN 2000
+
 // ADXL345 Accelerometer
 Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 float accelX = 0, accelY = 0, accelZ = 0;
@@ -300,6 +308,15 @@ void checkGasSensor() {
   }
 }
 
+void checkFlameSensor() {
+  int flameValue = analogRead(FLAME_PIN);
+  if (flameValue < FLAME_THRESHOLD && millis() - lastFlameTime > FLAME_COOLDOWN) {
+    flameEvents++;
+    flameDetected = true;
+    lastFlameTime = millis();
+  }
+}
+
 void resetAllSensors() {
   confirmedImpacts = 0;
   soundEvents = 0;
@@ -308,6 +325,7 @@ void resetAllSensors() {
   pirEvents = 0;
   rainEvents = 0;
   gasEvents = 0;
+  flameEvents = 0;
   impactDetected = false;
   soundDetected = false;
   touchDetected = false;
@@ -315,6 +333,7 @@ void resetAllSensors() {
   pirDetected = false;
   rainDetected = false;
   gasDetected = false;
+  flameDetected = false;
   
   // Turn off all LEDs
   digitalWrite(LED_RED_PIN, LOW);
@@ -385,6 +404,10 @@ void sendSensorData() {
   Serial.print(gasEvents);
   Serial.print(",");
   Serial.print(gasDetected ? "1" : "0");
+  Serial.print(",");
+  Serial.print(flameEvents);
+  Serial.print(",");
+  Serial.print(flameDetected ? "1" : "0");
   Serial.println();
   
   impactDetected = false;
@@ -394,6 +417,7 @@ void sendSensorData() {
   pirDetected = false;
   rainDetected = false;
   gasDetected = false;
+  flameDetected = false;
 }
 
 void forward() {
@@ -453,6 +477,7 @@ void setup() {
   pinMode(PIR_PIN, INPUT);
   pinMode(RAIN_PIN, INPUT);
   pinMode(MQ2_PIN, INPUT);
+  pinMode(FLAME_PIN, INPUT);
   
   // Initialize buzzer
   pinMode(BUZZER_PIN, OUTPUT);
@@ -472,7 +497,7 @@ void setup() {
   // Attach interrupt
   attachInterrupt(digitalPinToInterrupt(SHOCK_PIN), handleImpact, FALLING);
   
-  Serial.println("System initialized - Mega Version with MQ2 Gas Sensor");
+  Serial.println("System initialized - Mega Version with MQ2 Gas and Flame Sensors");
 }
 
 void loop() {
@@ -507,6 +532,7 @@ void loop() {
   checkPirSensor();
   checkRainSensor();
   checkGasSensor();
+  checkFlameSensor();
   
   // Send sensor data at regular intervals
   if (millis() - lastSensorReadTime > SENSOR_READ_INTERVAL) {
