@@ -2,7 +2,6 @@
 let socket = io();
 let fpvRecording = false;
 let rearRecording = false;
-let buttonActive = false;
 let accelData = [];
 const maxDataPoints = 50;
 let accelPlotResizeObserver = null;
@@ -641,7 +640,8 @@ function drawLidarScan(scanData) {
         currentFps = frameCount;
         frameCount = 0;
         lastFpsUpdate = now;
-        document.getElementById('lidar-fps').textContent = `FPS: ${currentFps}`;
+        const lidarFps = document.getElementById('lidar-fps');
+        if (lidarFps) lidarFps.textContent = `FPS: ${currentFps}`;
     }
     
     const centerX = lidarCanvas.width / 2;
@@ -776,12 +776,6 @@ function sendCommand(cmd) {
     
     console.log("Sending command:", cmd);
     socket.emit('control', cmd);
-    
-    // Add small delay to prevent command flooding
-    buttonActive = true;
-    setTimeout(() => {
-        buttonActive = false;
-    }, 200);
 }
 
 function handleButtonDown(cmd) {
@@ -906,13 +900,34 @@ function initButtonControls() {
     // Helper: attach press + release to a button
     function bindBtn(btn, downCmd, upCmd) {
         if (!btn) return;
-        const onDown = (e) => { e.preventDefault(); pressBtn(btn); handleButtonDown(downCmd); };
-        const onUp   = (e) => { releaseBtn(btn); if (upCmd) sendCommand(upCmd); else handleButtonUp(); };
+        let repeatTimer = null;
+        let pressed = false;
+        const onDown = (e) => {
+            e.preventDefault();
+            if (pressed) return;
+            pressed = true;
+            pressBtn(btn);
+            handleButtonDown(downCmd);
+            repeatTimer = window.setInterval(() => handleButtonDown(downCmd), 250);
+        };
+        const onUp = () => {
+            if (!pressed) return;
+            pressed = false;
+            if (repeatTimer !== null) {
+                window.clearInterval(repeatTimer);
+                repeatTimer = null;
+            }
+            releaseBtn(btn);
+            if (upCmd) sendCommand(upCmd);
+            else handleButtonUp();
+        };
         btn.addEventListener('mousedown',  onDown);
         btn.addEventListener('touchstart', onDown, { passive: false });
         btn.addEventListener('mouseup',    onUp);
         btn.addEventListener('touchend',   onUp);
         btn.addEventListener('mouseleave', onUp);
+        btn.addEventListener('touchcancel', onUp);
+        window.addEventListener('blur', onUp);
     }
 
     bindBtn(forwardBtn,  'F');

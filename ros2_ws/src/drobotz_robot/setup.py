@@ -20,6 +20,7 @@ setup(
         ("share/" + package_name, ["package.xml"]),
         ("share/" + package_name + "/launch", glob("launch/*.launch.py")),
         ("share/" + package_name + "/config", glob("config/*.yaml")),
+        ("share/" + package_name + "/worlds", glob("worlds/*.sdf")),
         ("share/" + package_name + "/firmware", glob("firmware/*")),
         ("share/" + package_name + "/models", glob("models/*")),
         *share_files,
@@ -34,6 +35,7 @@ setup(
     entry_points={
         "console_scripts": [
             "hardware_node = drobotz_robot.nodes.hardware_node:main",
+            "simulation_hardware_node = drobotz_robot.nodes.simulation_hardware_node:main",
             "camera_node = drobotz_robot.nodes.camera_node:main",
             "system_monitor_node = drobotz_robot.nodes.system_monitor_node:main",
             "obstacle_avoidance_node = drobotz_robot.nodes.obstacle_avoidance_node:main",
